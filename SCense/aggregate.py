@@ -6,6 +6,7 @@ from functools import reduce, partial
 from itertools import product
 import networkx as nx
 from collections import namedtuple
+from sklearn import metrics
 
 ClusterRef = namedtuple("ClusterRef", ("clustering_id", "cluster_id"))
 
@@ -134,25 +135,59 @@ def build_graph(settings, clusters):
                 graph.append(edge)
     return graph
 
-@numba.njit
-def _product(a, b):
-    for el1 in a:
-        for el2 in b:
-            yield (el1, el2)
 
-@numba.jit
-def _build_graph(neighbors, mapping):
+def build_global_graph(settings, clusters):
     graph = list()  # edge list
+    neighbors = gen_neighbors(settings, "oou")
     for clustering1, clustering2 in neighbors:
-        clusters1 = mapping[clustering1]
-        clusters2 = mapping[clustering2]
-        for clust1, clust2 in _product(list(clusters1.keys()), list(clusters2.keys())):
-            intersect = np.intersect1d(
-                clusters1[clust1], clusters2[clust2], assume_unique=True)
-            if len(intersect) > 0:
-                edge = ((clustering1, clust1), (clustering2, clust2))
-                graph.append(edge)
+        clusters1 = clusters[clustering1]
+        clusters2 = clusters[clustering2]
+        score = metrics.adjusted_rand_score(clusters1, clusters2)
+        edge = (clustering1, clustering2, score)
+        graph.append(edge)
     return graph
+
+
+
+def gen_mapping(clusterings):
+    """
+    Create a mapping from parameters to clusters to contents
+    
+    Args:
+        settings (pd.DataFrame)
+        clusters (pd.DataFrame)
+    """
+    keys = []
+    values = []
+    for clustering_id, clustering in clusterings.items():
+        for cluster_id in clustering.unique():
+            keys.append((clustering_id, cluster_id))
+            values.append(np.where(clustering == cluster_id)[0])
+    mapping = pd.Series(values,
+                        index=pd.MultiIndex.from_tuples(keys, names=["clustering", "cluster"]))
+    return mapping
+
+
+
+# @numba.njit
+# def _product(a, b):
+#     for el1 in a:
+#         for el2 in b:
+#             yield (el1, el2)
+
+# @numba.jit
+# def _build_graph(neighbors, mapping):
+#     graph = list()  # edge list
+#     for clustering1, clustering2 in neighbors:
+#         clusters1 = mapping[clustering1]
+#         clusters2 = mapping[clustering2]
+#         for clust1, clust2 in _product(list(clusters1.keys()), list(clusters2.keys())):
+#             intersect = np.intersect1d(
+#                 clusters1[clust1], clusters2[clust2], assume_unique=True)
+#             if len(intersect) > 0:
+#                 edge = ((clustering1, clust1), (clustering2, clust2))
+#                 graph.append(edge)
+#     return graph
 
 
 
@@ -174,20 +209,4 @@ def _build_graph(neighbors, mapping):
 #     return mapping
 
 
-def gen_mapping(clusterings):
-    """
-    Create a mapping from parameters to clusters to contents
-    
-    Args:
-        settings (pd.DataFrame)
-        clusters (pd.DataFrame)
-    """
-    keys = []
-    values = []
-    for clustering_id, clustering in clusterings.items():
-        for cluster_id in clustering.unique():
-            keys.append((clustering_id, cluster_id))
-            values.append(np.where(clustering == cluster_id)[0])
-    mapping = pd.Series(values, 
-        index=pd.MultiIndex.from_tuples(keys, names=["clustering", "cluster"]))
-    return mapping
+
