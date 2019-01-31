@@ -4,26 +4,30 @@ import pandas as pd
 import numpy as np
 from .aggregate import Component
 
-#TODO: Make it possible to have plot objects returned
-#TODO: Think up visualization for the set of components
+# TODO: Make it possible to have plot objects returned
+# TODO: Think up visualization for the set of components
 
-#TODO: Add title arg, & fix formatting. 
-#TODO: Change colorbar to discrete
-#TODO: crosstab instead of pivot_table?
+
+# TODO: Add title arg, & fix formatting.
+# TODO: Change colorbar to discrete
+# TODO: crosstab instead of pivot_table?
 def component_param_range(component, x, y, ax=None):
     """
     Given a component, show which parameters it's found at as a heatmap.
     """
     # Initialize blank array
     data = pd.pivot_table(
-        component._parent.settings[[x, y]], index=y, columns=x, aggfunc=lambda x: 0)
+        component._parent.settings[[x, y]], index=y, columns=x, aggfunc=lambda x: 0
+    )
     params = pd.pivot_table(
-        component.settings[[x, y]], index=y, columns=x, aggfunc=len, fill_value=0)
+        component.settings[[x, y]], index=y, columns=x, aggfunc=len, fill_value=0
+    )
     # Maybe use this to calculate color bar?
     # all_params = pd.pivot_table(
-        # component._parent.settings, index=y, columns=x, aggfunc=len, fill_value=0)
+    # component._parent.settings, index=y, columns=x, aggfunc=len, fill_value=0)
     data = (data + params).fillna(0).astype(int)
-    sns.heatmap(data, annot=True, linewidths=.5, ax=ax)   # fmt="d",
+    sns.heatmap(data, annot=True, linewidths=0.5, ax=ax)  # fmt="d",
+
 
 def umap(component, adata, ax=None):
     cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
@@ -43,6 +47,8 @@ def plot_component(component, adata, x="n_neighbors", y="resolution"):
     component_param_range(component, x, y, ax=heatmap_ax)
     umap(component, adata, ax=umap_ax)
     return fig
+
+
 # gs = gridspec.GridSpec(nrows=n_panels_y,
 #                        ncols=n_panels_x,
 #                        left=left,
