@@ -8,6 +8,9 @@ import networkx as nx
 from collections import namedtuple
 from sklearn import metrics
 
+# TODO: Generalize documentation
+# TODO: Should _mapping be mapping? Would I want to give names then?
+
 ClusterRef = namedtuple("ClusterRef", ("clustering_id", "cluster_id"))
 
 # TODO: Have views map back to clustering index names
@@ -38,6 +41,20 @@ class ClusterIndexer(object):
 class Component(object):
     """
     A connected component from a `Reconciler`
+
+    Attributes
+    ----------
+    _parent : Reconciler
+        The reconciler which generated this component
+    settings : pd.DataFrame
+        Subset of parents settings. Contains only settings for clustering 
+        which appear in this component.
+    _mapping : pd.Series
+        Partial view of parents `_mapping`.
+    intersect : np.array
+        Intersect of clusters in this component.
+    union : np.array
+        Union of clusters in this component.
     """
     def __init__(self, reconciler, cluster_ids):
         self._parent = reconciler
@@ -48,11 +65,6 @@ class Component(object):
         # self.clusters = ClusterIndexer(self)
         self.intersect = reduce(partial(np.intersect1d, assume_unique=True), self._mapping.values)
         self.union = reduce(np.union1d, self._mapping.values)
-
-
-    # def parameters(self):
-    #     clusterings = self._mapping.index.get_level_values("clustering").unique()
-    #     return self._parent.settings.loc[clusterings]
 
     def one_hot(self, selection="intersect"):
         encoding = np.zeros(self._parent.clusterings.shape[0], dtype=bool)
@@ -73,6 +85,26 @@ class Component(object):
 class Reconciler(object):
     """
     Clusters from many clusterings and their neighbors in parameter space.
+
+    Attributes
+    ----------
+    settings : pd.DataFrame
+        Contains settings for all clusterings. Index corresponds to 
+        `.clusterings` columns, while columns should correspond to the 
+        parameters which were varied.
+    clusterings : pd.DataFrame
+        Contains cluster assignments for each cell, for each clustering. 
+        Columns correspond to `.settings` index, while the index correspond 
+        to the cells.
+    _obs_names : pd.Index
+        Ordered set for names of the cells. Internally they are refered to by 
+        integer positions.
+    _mapping : pd.Series
+        Series which maps clustering and cluster id to that contents clusters.
+    graph : nx.Graph
+        Weighted graph. Nodes are clusters (identified by tuple of clustering
+        and cluster ids). Edges connect clusters with shared contents. Weight
+        is the Jaccard similarity between the contents of the clusters.
     """
     def __init__(self, settings, clusterings):
         assert all(settings.index == clusterings.columns)
@@ -148,14 +180,19 @@ def build_global_graph(settings, clusters):
     return graph
 
 
-
 def gen_mapping(clusterings):
     """
-    Create a mapping from parameters to clusters to contents
-    
-    Args:
-        settings (pd.DataFrame)
-        clusters (pd.DataFrame)
+    Create a mapping from clustering and cluster to cluster contents.
+
+    Parameters
+    ----------
+    clusterings : pd.DataFrame
+
+    Returns
+    -------
+    pd.Series
+        Mapping to cluster contents. Index is a MultiIndex with levels 
+        "clustering", "cluster". Values are np.arrays of 
     """
     keys = []
     values = []
