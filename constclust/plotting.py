@@ -1,6 +1,8 @@
 import seaborn as sns
+import matplotlib.pyplot as plt
 import scanpy as sc
 import pandas as pd
+import networkx as nx
 import numpy as np
 from .aggregate import Component
 
@@ -49,6 +51,8 @@ def plot_component(component, adata, x="n_neighbors", y="resolution"):
     return fig
 
 
+def edge_weight_distribution(recon, **kwargs):
+    return sns.distplot(nx.to_pandas_edgelist(recon.graph)["weight"], **kwargs)
 # gs = gridspec.GridSpec(nrows=n_panels_y,
 #                        ncols=n_panels_x,
 #                        left=left,
