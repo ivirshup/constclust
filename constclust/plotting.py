@@ -1,4 +1,6 @@
+from . import aggregate
 import seaborn as sns
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scanpy as sc
 import pandas as pd
@@ -31,23 +33,71 @@ def component_param_range(component, x, y, ax=None):
     sns.heatmap(data, annot=True, linewidths=0.5, ax=ax)  # fmt="d",
 
 
-def umap(component, adata, ax=None):
+def umap(component, adata, ax=None, umap_kwargs={}):
     cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
     for cluster in component._mapping:
         cell_value[cluster] += 1
     cell_value = cell_value / cell_value.max()
     adata.obs["_tmp"] = cell_value
-    sc.pl.umap(adata, color="_tmp", ax=ax)
+    sc.pl.umap(adata, color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
-def plot_component(component, adata, x="n_neighbors", y="resolution"):
-    fig = plt.figure()
-    gs = fig.add_gridspec(1, 2)
-    umap_ax = fig.add_subplot(gs[0, 1])
+def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=sns.cm.rocket, ax=None):
+    # This should probably aggregate, currently do hacky thing of just subsetting
+    simple_settings = settings[settings["random_state"] == 0]
+    simple_clusters = clusters[simple_settings.index]
+#     if len(set(settings[[x,y]].itertuples(index=False))) != len(settings):
+#         raise NotImplementedError("Aggregation of multiple plots not yet implemented.")
+    mapping = dict(zip(simple_settings.index, simple_settings[["n_neighbors", "resolution"]].itertuples(index=False, name=None)))
+    edges = aggregate.build_global_graph(simple_settings, simple_clusters)
+    lines = []
+    colors = []
+    for edge in edges:
+        color = edge[2]
+        line = [mapping[edge[0]], mapping[edge[1]]]
+        colors.append(color)
+        lines.append(line)
+    lc = mpl.collections.LineCollection(lines, cmap=cmap)
+    lc.set_array(np.array(colors))
+    if ax is not None:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots()
+    ax.add_collection(lc)
+    ax.set_xticks(list(simple_settings[x].unique()))
+    ax.set_yticks(list(simple_settings[y].unique()))
+    ax.invert_yaxis()
+    ax.autoscale()
+    ax.set_frame_on(False)
+    cb = fig.colorbar(lc, ax=ax)
+    cb.outline.set_visible(False)
+
+
+def plot_component(component,
+                   adata,
+                   x="n_neighbors",
+                   y="resolution",
+                   plot_global=False,
+                   aspect=None,
+                   umap_kwargs={}):
+    if aspect is None:
+        if plot_global:
+            aspect = 1/3
+        else:
+            aspect = 1/2
+    fig = plt.figure(figsize=mpl.figure.figaspect(aspect))
+    if plot_global:
+        reconciler = component._parent
+        gs = fig.add_gridspec(1, 3)
+        global_ax = fig.add_subplot(gs[0, 1])
+        global_stability(reconciler.settings, reconciler.clusterings, x, y, ax=global_ax)
+    else:
+        gs = fig.add_gridspec(1, 2)
     heatmap_ax = fig.add_subplot(gs[0, 0])
+    umap_ax = fig.add_subplot(gs[0, -1])
     component_param_range(component, x, y, ax=heatmap_ax)
-    umap(component, adata, ax=umap_ax)
+    umap(component, adata, ax=umap_ax, umap_kwargs=umap_kwargs)
     return fig
 
 
