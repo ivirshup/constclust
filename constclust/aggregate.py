@@ -123,7 +123,7 @@ class Reconciler(object):
         self.graph = nx.Graph()
         self.graph.add_weighted_edges_from(build_graph(settings, clusterings))
 
-    def get_components(self, min_weight):
+    def get_components(self, min_weight, min_cells=2):
         """
         Return connected components of graph, with edges filtered by min_weight
         """
@@ -134,7 +134,10 @@ class Reconciler(object):
         )
         comps = []
         for graph_comp in nx.connected_components(sub_g):
-            comps.append(Component(self, list(graph_comp)))
+            comp = Component(self, list(graph_comp))
+            if len(comp.intersect) < min_cells:
+                continue
+            comps.append(comp)
         return comps
 
     def get_param_range(self, clusters):
