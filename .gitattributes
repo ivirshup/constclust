@@ -1,0 +1,2 @@
+*.ipynb filter=lfs diff=lfs merge=lfs -text
+*.h5ad filter=lfs diff=lfs merge=lfs -text
