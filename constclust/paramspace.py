@@ -28,7 +28,6 @@ import plotly.graph_objs as go
 #             edges.append((s, new_s))
 #     return edges
 
-# TODO test me
 def gen_neighbors(settings, orders=None):
     """
     Parameters
