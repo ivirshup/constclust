@@ -85,12 +85,23 @@ class Component(object):
         return len(self._mapping)
 
     def __repr__(self):
-        return f"<Component n_solutions={len(self)}, max_cells={len(self.union)}, min_cells={len(self.intersect)}>"
+        return (f"<Component n_solutions={len(self)}, "
+                f"max_cells={len(self.union)}, "
+                f"min_cells={len(self.intersect)}>")
+
+
+# This is a placeholder constructor. Eventually it will contain the logic for
+# calculating a Reconciler from settings and clusterings, while the Reconciler
+# "inner constructor" will take these plus the constructed graph and mapping
+def reconcile(settings, clusterings):
+    """Constructor for reconciler object"""
+    return Reconciler(settings, clusterings)
 
 
 class Reconciler(object):
     """
-    Clusters from many clusterings and their neighbors in parameter space.
+    Collects and reconciles many clusterings by local (in parameter space)
+    stability.
 
     Attributes
     ----------
@@ -138,6 +149,7 @@ class Reconciler(object):
             if len(comp.intersect) < min_cells:
                 continue
             comps.append(comp)
+        comps.sort(key=lambda x: (len(x.settings), len(x.intersect)), reverse=True)
         return comps
 
     def get_param_range(self, clusters):
