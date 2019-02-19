@@ -31,6 +31,15 @@ def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
     """
     Given a component, show which parameters it's found at as a heatmap.
     """
+    # Calculate colorbar
+    param_states = pd.Series(component._parent.settings[[x, y]].itertuples(index=False))
+    ncolors = param_states.value_counts().max() + 1
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        "dummy_name",
+        sns.cm.rocket(np.linspace(20, 240, ncolors, dtype=int)),  # Shifted a little so it's prettier
+        ncolors
+    )
+
     # Initialize blank array
     data = pd.pivot_table(
         component._parent.settings[[x, y]], index=y, columns=x, aggfunc=lambda x: 0
@@ -38,24 +47,35 @@ def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
     params = pd.pivot_table(
         component.settings[[x, y]], index=y, columns=x, aggfunc=len, fill_value=0
     )
-    # Maybe use this to calculate color bar?
-    # all_params = pd.pivot_table(
-    # component._parent.settings, index=y, columns=x, aggfunc=len, fill_value=0)
     data = (data + params).fillna(0).astype(int)
+
     ax = sns.heatmap(
         data,
-        annot=True,
-        linewidths=0.5,
+        linewidths=0.2,
         ax=ax,
+        vmin=0,
+        vmax=ncolors,
+        cmap=cmap,
     )
+
+    # Fix axis labels
     if is_float_dtype(component._parent.settings[x].dtype):
         _fix_seaborn_float_labels(ax.xaxis)
     if is_float_dtype(component._parent.settings[y].dtype):
         _fix_seaborn_float_labels(ax.yaxis)
 
+    # Discretize colorbar
+    cb = ax.collections[0].colorbar
+    new_pos = np.stack([cb._boundaries[:-1], cb._boundaries[1:]], 1).mean(axis=1)
+    assert len(new_pos) == ncolors
+    cb.set_ticks(new_pos)
+    cb.set_ticklabels(list(range(ncolors)))
+
+    return ax
+
 
 def umap(component, adata, ax=None, umap_kwargs={}):
-    cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
+    cell_value = pd.Series(0, index=adata.obs_names, dtype=float) 
     for cluster in component._mapping:
         cell_value[cluster] += 1
     cell_value = cell_value / cell_value.max()
