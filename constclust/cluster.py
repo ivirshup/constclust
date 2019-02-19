@@ -52,12 +52,14 @@ def cluster(adata, n_neighbors, resolutions, random_state, n_procs=1):
     with Pool(n_procs) as p:
         solutions = p.map(_cluster_single, cluster_jobs)
     clusters = pd.DataFrame(index=adata.obs_names)
-    settings = pd.DataFrame(index=range(len(solutions)), columns=[
-                            "n_neighbors", "resolution", "random_state"])
-    for i in range(len(solutions)):
-        job = cluster_jobs[i]
-        clusters[i] = solutions[i]
-        settings.loc[i, :] = job["n_neighbors"], job["resolution"], job["random_state"]
+    for i, clustering in enumerate(solutions):
+        clusters[i] = clustering
+    settings_iter = ((job["n_neighbors"], job["resolution"], job["random_state"]) for job in cluster_jobs)
+    settings = pd.DataFrame.from_records(
+        settings_iter,
+        columns=["n_neighbors", "resolution", "random_state"],
+        index=range(len(solutions))
+    )
     return settings, clusters
 
 
