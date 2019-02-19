@@ -4,6 +4,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scanpy as sc
 import pandas as pd
+from pandas.api.types import is_float_dtype
 import networkx as nx
 import numpy as np
 from .aggregate import Component
@@ -12,10 +13,21 @@ from .aggregate import Component
 # TODO: Think up visualization for the set of components
 
 
-# TODO: Add title arg, & fix formatting.
+def _fix_seaborn_float_labels(axis):
+    """
+    Seaborn is bad at formatting floating point on axes, and fixing it there
+    would probably involve learning about unicode in python2. This takes an
+    axis (like, x-axis, not plt.Axes) and formats the floats better.
+    """
+    fmt = axis.get_major_formatter()
+    fmt.seq = ["{:g}".format(float(s)) for s in fmt.seq]
+    axis.set_major_formatter(fmt)
+
+
+# TODO: Add title arg
 # TODO: Change colorbar to discrete
 # TODO: crosstab instead of pivot_table?
-def component_param_range(component, x, y, ax=None):
+def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
     """
     Given a component, show which parameters it's found at as a heatmap.
     """
@@ -30,7 +42,16 @@ def component_param_range(component, x, y, ax=None):
     # all_params = pd.pivot_table(
     # component._parent.settings, index=y, columns=x, aggfunc=len, fill_value=0)
     data = (data + params).fillna(0).astype(int)
-    sns.heatmap(data, annot=True, linewidths=0.5, ax=ax)  # fmt="d",
+    ax = sns.heatmap(
+        data,
+        annot=True,
+        linewidths=0.5,
+        ax=ax,
+    )
+    if is_float_dtype(component._parent.settings[x].dtype):
+        _fix_seaborn_float_labels(ax.xaxis)
+    if is_float_dtype(component._parent.settings[y].dtype):
+        _fix_seaborn_float_labels(ax.yaxis)
 
 
 def umap(component, adata, ax=None, umap_kwargs={}):
@@ -45,12 +66,12 @@ def umap(component, adata, ax=None, umap_kwargs={}):
 
 def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=sns.cm.rocket, ax=None):
     # This should probably aggregate, currently do hacky thing of just subsetting
-    simple_settings = settings[settings["random_state"] == 0]
-    simple_clusters = clusters[simple_settings.index]
-#     if len(set(settings[[x,y]].itertuples(index=False))) != len(settings):
-#         raise NotImplementedError("Aggregation of multiple plots not yet implemented.")
-    mapping = dict(zip(simple_settings.index, simple_settings[["n_neighbors", "resolution"]].itertuples(index=False, name=None)))
-    edges = aggregate.build_global_graph(simple_settings, simple_clusters)
+    if len(set(settings[[x,y]].itertuples(index=False))) != len(settings):
+        # raise NotImplementedError("Aggregation of multiple global solutions not yet implemented.")
+        settings = settings[settings["random_state"] == 0].copy()
+    clusters = clusters[settings.index].copy()
+    mapping = dict(zip(settings.index, settings[["n_neighbors", "resolution"]].itertuples(index=False, name=None)))
+    edges = aggregate.build_global_graph(settings, clusters)
     lines = []
     colors = []
     for edge in edges:
@@ -65,8 +86,8 @@ def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=s
     else:
         fig, ax = plt.subplots()
     ax.add_collection(lc)
-    ax.set_xticks(list(simple_settings[x].unique()))
-    ax.set_yticks(list(simple_settings[y].unique()))
+    ax.set_xticks(list(settings[x].unique()))
+    ax.set_yticks(list(settings[y].unique()))
     ax.invert_yaxis()
     ax.autoscale()
     ax.set_frame_on(False)
