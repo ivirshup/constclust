@@ -1,4 +1,4 @@
-from constclust.aggregate import Reconciler
+from constclust.aggregate import reconcile
 from itertools import product
 import pandas as pd
 import pytest
@@ -32,7 +32,7 @@ def clustering_run():
 
 def test_reconcile(clustering_run):
     settings, clusterings = clustering_run
-    recon = Reconciler(settings, clusterings)
+    recon = reconcile(settings, clusterings)
     comps = recon.get_components(0.9)
     assert len(comps) == 2
     assert len(comps[0].intersect) == 50

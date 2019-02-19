@@ -61,6 +61,7 @@ class Component(object):
 
     def __init__(self, reconciler, cluster_ids):
         self._parent = reconciler
+        self._cluster_ids = cluster_ids
         self._mapping = self._parent._mapping.loc[cluster_ids]
         clusterings = self._mapping.index.get_level_values("clustering").unique()
         self.settings = self._parent.settings.loc[clusterings]
@@ -95,7 +96,10 @@ class Component(object):
 # "inner constructor" will take these plus the constructed graph and mapping
 def reconcile(settings, clusterings):
     """Constructor for reconciler object"""
-    return Reconciler(settings, clusterings)
+    mapping = gen_mapping(clusterings)
+    graph = nx.Graph()
+    graph.add_weighted_edges_from(build_graph(settings, clusterings))
+    return Reconciler(settings, clusterings, mapping, graph)
 
 
 class Reconciler(object):
@@ -124,15 +128,17 @@ class Reconciler(object):
         is the Jaccard similarity between the contents of the clusters.
     """
 
-    def __init__(self, settings, clusterings):
+    def __init__(self, settings, clusterings, mapping, graph):
         assert all(settings.index == clusterings.columns)
         self.settings = settings
         self.clusterings = clusterings
         self._obs_names = clusterings.index
-        self._mapping = gen_mapping(clusterings)
-        self.clusters = ClusterIndexer(self)
-        self.graph = nx.Graph()
-        self.graph.add_weighted_edges_from(build_graph(settings, clusterings))
+        self._mapping = mapping
+        self.graph = graph
+        # self._mapping = gen_mapping(clusterings)
+        # self.clusters = ClusterIndexer(self)
+        # self.graph = nx.Graph()
+        # self.graph.add_weighted_edges_from(build_graph(settings, clusterings))
 
     def get_components(self, min_weight, min_cells=2):
         """
@@ -170,13 +176,40 @@ class Reconciler(object):
         return self.settings.loc[idx]
 
 
+# TODO (important, large task): Speed up graph building
+def _get_edges(clustering1, clustering2, clustering1_id, clustering2_id):
+    edges = []
+    ls1 = [len(c) for c in clustering1]
+    ls2 = [len(c) for c in clustering2]  # This should just be a lookup, right?
+    cs1 = [set(c) for c in clustering1]
+    cs2 = [set(c) for c in clustering2]
+    for id1, c1 in enumerate(cs1):
+        for id2, c2 in enumerate(cs2):
+            intersect = c1.intersection(c2)
+            isize = len(intersect)
+            if len(isize) > 0:
+                c1.difference_update(intersect)
+                c2.difference_update(intersect)
+                jaccard_sim = isize / (
+                    ls1[id1] + ls2[id2] - isize
+                )
+                edge = (
+                    ClusterRef(clustering1_id, id1),
+                    ClusterRef(clustering2_id, id2),
+                    jaccard_sim,
+                )
+                edges.append(edge)
+    return edges
+
+
+# def _com
 def build_graph(settings, clusters):
     """
     Build a graph of overlapping clusters (for neighbors in parameter space).
     """
     graph = list()  # edge list
-    neighbors = gen_neighbors(settings, "oou")
-    mapping = gen_mapping(clusters)
+    neighbors = gen_neighbors(settings, "oou") # TODO: Pass ordering args
+    mapping = gen_mapping(clusters) # TODO: Should pass this
     for clustering1, clustering2 in neighbors:
         clusters1 = mapping[clustering1]
         clusters2 = mapping[clustering2]
@@ -223,16 +256,36 @@ def gen_mapping(clusterings):
         Mapping to cluster contents. Index is a MultiIndex with levels
         "clustering", "cluster". Values are np.arrays of cluster contents.
     """
-    keys = []
-    values = []
-    for clustering_id, clustering in clusterings.items():
-        for cluster_id in clustering.unique():
-            keys.append((clustering_id, cluster_id))
-            values.append(np.where(clustering == cluster_id)[0])
+    keys, values = _gen_mapping(clusterings.values)
     mapping = pd.Series(
         values, index=pd.MultiIndex.from_tuples(keys, names=["clustering", "cluster"])
     )
     return mapping
+
+
+@numba.njit(cache=True)
+def _gen_mapping(clusterings):
+    n_cells, n_clusts = clusterings.shape
+    keys = []
+    values = []
+    for clustering_id in np.arange(n_clusts):
+        clustering = clusterings[:, clustering_id]
+        sorted_idxs = np.argsort(clustering, kind="mergesort")
+        sorted_vals = clustering[sorted_idxs]
+        indices = list(np.where(np.diff(sorted_vals))[0] + 1)
+        # With numba (numba doesn't have np.split)
+        indices.append(n_cells)
+        split_vals = list()
+        cur = 0
+        for i in range(len(indices)):
+            nxt = indices[i]
+            split_vals.append(sorted_idxs[cur:nxt])
+            cur = nxt
+        # Without numba
+        # split_vals = np.split(sorted_idxs, indices) 
+        values.extend(split_vals)
+        keys.extend([(clustering_id, i) for i in range(len(split_vals))])
+    return keys, values
 
 
 # @numba.njit
