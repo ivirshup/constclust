@@ -1,17 +1,21 @@
 from .paramspace import gen_neighbors
+
+import networkx as nx
 import numba
 import numpy as np
 import pandas as pd
-from functools import reduce, partial
-from itertools import product
-import networkx as nx
-from collections import namedtuple
 from sklearn import metrics
 
+from collections import namedtuple
+from functools import reduce, partial
+# from itertools import product
+from itertools import chain
+from multiprocessing import Pool
 # TODO: Generalize documentation
 # TODO: Should _mapping be mapping? Would I want to give names then?
 
 ClusterRef = namedtuple("ClusterRef", ("clustering_id", "cluster_id"))
+
 
 # TODO: Have views map back to clustering index names
 # Alternatively, do I just want to use a mapping?
@@ -176,18 +180,36 @@ class Reconciler(object):
         return self.settings.loc[idx]
 
 
-# TODO (important, large task): Speed up graph building
+def _prep_neighbors(neighbors, mapping):
+    for clustering1_id, clustering2_id in neighbors:
+        clusters1 = mapping[clustering1_id]
+        clusters2 = mapping[clustering2_id]
+        yield (
+            list(clusters1.values),  # Numba hates array of arrays?
+            list(clusters2.values),
+            clustering1_id,
+            clustering2_id
+        )
+
+
+def _call_get_edges(args):
+    """Helper function for Pool.map"""
+    return _get_edges(*args)
+
+
+@numba.njit(cache=True)
 def _get_edges(clustering1, clustering2, clustering1_id, clustering2_id):
     edges = []
+    # Cache set sizes since I mutate the sets
     ls1 = [len(c) for c in clustering1]
-    ls2 = [len(c) for c in clustering2]  # This should just be a lookup, right?
+    ls2 = [len(c) for c in clustering2]
     cs1 = [set(c) for c in clustering1]
     cs2 = [set(c) for c in clustering2]
     for id1, c1 in enumerate(cs1):
         for id2, c2 in enumerate(cs2):
             intersect = c1.intersection(c2)
             isize = len(intersect)
-            if len(isize) > 0:
+            if isize > 0:
                 c1.difference_update(intersect)
                 c2.difference_update(intersect)
                 jaccard_sim = isize / (
@@ -202,32 +224,50 @@ def _get_edges(clustering1, clustering2, clustering1_id, clustering2_id):
     return edges
 
 
-# def _com
-def build_graph(settings, clusters):
+def build_graph(settings, clusters, mapping=None, nprocs=1):
     """
     Build a graph of overlapping clusters (for neighbors in parameter space).
     """
     graph = list()  # edge list
     neighbors = gen_neighbors(settings, "oou") # TODO: Pass ordering args
-    mapping = gen_mapping(clusters) # TODO: Should pass this
-    for clustering1, clustering2 in neighbors:
-        clusters1 = mapping[clustering1]
-        clusters2 = mapping[clustering2]
-        for (id1, clust1), (id2, clust2) in product(
-            clusters1.items(), clusters2.items()
-        ):
-            intersect = np.intersect1d(clust1, clust2, assume_unique=True)
-            if len(intersect) > 0:
-                jaccard_sim = intersect.size / (
-                    clust1.size + clust2.size - intersect.size
-                )
-                edge = (
-                    ClusterRef(clustering1, id1),
-                    ClusterRef(clustering2, id2),
-                    jaccard_sim,
-                )
-                graph.append(edge)
-    return graph
+    if mapping is None:
+        mapping = gen_mapping(clusters)
+    args = list(_prep_neighbors(neighbors, mapping))
+    if nprocs > 1:
+        with Pool(nprocs) as p:
+            edges = p.map(_call_get_edges, args, chunksize=20)
+        graph = chain.from_iterable(edges)
+    else:
+        graph = chain.from_iterable(map(_call_get_edges, args))
+    return list(graph)
+
+
+# def build_graph(settings, clusters, mapping=None):
+#     """
+#     Build a graph of overlapping clusters (for neighbors in parameter space).
+#     """
+#     graph = list()  # edge list
+#     neighbors = gen_neighbors(settings, "oou") # TODO: Pass ordering args
+#     if mapping is not None:
+#         mapping = gen_mapping(clusters)
+#     for clustering1, clustering2 in neighbors:
+#         clusters1 = mapping[clustering1]
+#         clusters2 = mapping[clustering2]
+#         for (id1, clust1), (id2, clust2) in product(
+#             clusters1.items(), clusters2.items()
+#         ):
+#             intersect = np.intersect1d(clust1, clust2, assume_unique=True)
+#             if len(intersect) > 0:
+#                 jaccard_sim = intersect.size / (
+#                     clust1.size + clust2.size - intersect.size
+#                 )
+#                 edge = (
+#                     ClusterRef(clustering1, id1),
+#                     ClusterRef(clustering2, id2),
+#                     jaccard_sim,
+#                 )
+#                 graph.append(edge)
+#     return graph
 
 
 def build_global_graph(settings, clusters):
@@ -282,7 +322,7 @@ def _gen_mapping(clusterings):
             split_vals.append(sorted_idxs[cur:nxt])
             cur = nxt
         # Without numba
-        # split_vals = np.split(sorted_idxs, indices) 
+        # split_vals = np.split(sorted_idxs, indices)
         values.extend(split_vals)
         keys.extend([(clustering_id, i) for i in range(len(split_vals))])
     return keys, values
