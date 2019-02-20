@@ -38,7 +38,7 @@ def gen_neighbors(settings, orders=None):
         List of characters specifying ordering of elements. Elements are
         either "o" for ordered, or "u" for unordered. If nothing is passed,
         all elements are considered ordered.
-        
+
     Returns
     -------
     List(Tuple)

@@ -86,7 +86,7 @@ def umap(component, adata, ax=None, umap_kwargs={}):
 
 def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=sns.cm.rocket, ax=None):
     # This should probably aggregate, currently do hacky thing of just subsetting
-    if len(set(settings[[x,y]].itertuples(index=False))) != len(settings):
+    if len(set(settings[[x, y]].itertuples(index=False))) != len(settings):
         # raise NotImplementedError("Aggregation of multiple global solutions not yet implemented.")
         settings = settings[settings["random_state"] == 0].copy()
     clusters = clusters[settings.index].copy()

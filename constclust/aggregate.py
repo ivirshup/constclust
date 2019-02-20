@@ -98,11 +98,20 @@ class Component(object):
 # This is a placeholder constructor. Eventually it will contain the logic for
 # calculating a Reconciler from settings and clusterings, while the Reconciler
 # "inner constructor" will take these plus the constructed graph and mapping
-def reconcile(settings, clusterings):
-    """Constructor for reconciler object"""
+def reconcile(settings, clusterings, nprocs=1):
+    """Constructor for reconciler object.
+
+    Args:
+        settings (`pd.DataFrame`)
+        clusterings (`pd.DataFrame`)
+        nprocs (`int`)
+    """
+    assert all(settings.index == clusterings.columns)
     mapping = gen_mapping(clusterings)
+    edges = build_graph(settings, clusterings, mapping=mapping, nprocs=nprocs)
+    # edges = build_graph(settings, clusterings, mapping, nprocs=nprocs)
     graph = nx.Graph()
-    graph.add_weighted_edges_from(build_graph(settings, clusterings))
+    graph.add_weighted_edges_from(edges)
     return Reconciler(settings, clusterings, mapping, graph)
 
 
@@ -187,6 +196,11 @@ def _prep_neighbors(neighbors, mapping):
         yield (
             list(clusters1.values),  # Numba hates array of arrays?
             list(clusters2.values),
+            # The commented out below do not work for numba reasons 😿
+            # list(map(set, clusters1.values)),
+            # list(map(set, clusters2.values)),
+            # np.array([set(x) for x in clusters1.values]),
+            # np.array([set(x) for x in clusters2.values]),
             clustering1_id,
             clustering2_id
         )
@@ -229,7 +243,7 @@ def build_graph(settings, clusters, mapping=None, nprocs=1):
     Build a graph of overlapping clusters (for neighbors in parameter space).
     """
     graph = list()  # edge list
-    neighbors = gen_neighbors(settings, "oou") # TODO: Pass ordering args
+    neighbors = gen_neighbors(settings, "oou")  # TODO: Pass ordering args
     if mapping is None:
         mapping = gen_mapping(clusters)
     args = list(_prep_neighbors(neighbors, mapping))
