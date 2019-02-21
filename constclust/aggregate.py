@@ -423,3 +423,14 @@ def _gen_mapping(clusterings):
         values.extend(split_vals)
         keys.extend([(clustering_id, i) for i in range(len(split_vals))])
     return keys, values
+
+
+def comp_stats(comps):
+    stats = pd.DataFrame({
+        "n_clusts": [len(c) for c in comps],
+        "intersect": [len(c.intersect) for c in comps],
+        "union": [len(c.union) for c in comps]
+    })
+    for col in stats:
+        stats[f"log1p_{col}"] = np.log1p(stats[col])
+    return stats
