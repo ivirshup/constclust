@@ -74,15 +74,24 @@ def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
 
 
 def umap(component, adata, ax=None, umap_kwargs={}):
-    cell_value = pd.Series(0, index=adata.obs_names, dtype=float) 
+    # TODO: Views should have parents, which is where I should get my obs names
+    cell_names = component._parent._obs_names
+    # if not all(cell_names.isin(adata.obs_names)):
+        # raise ValueError("Counldn't find all cells in component's parent in adata.")
+    cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
     for cluster in component._mapping:
         cell_value[cluster] += 1
     cell_value = cell_value / cell_value.max()
     adata.obs["_tmp"] = cell_value
-    sc.pl.umap(adata, color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
+    if (len(cell_names) < len(adata.obs_names)):
+        # Take view
+        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
+    else: 
+        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
+# TODO: Make fake grid to plot on so it doesn't look weird when I have log scaled variables
 def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=sns.cm.rocket, ax=None):
     # This should probably aggregate, currently do hacky thing of just subsetting
     if len(set(settings[[x, y]].itertuples(index=False))) != len(settings):

@@ -4,13 +4,14 @@ import igraph
 import numba
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_categorical_dtype, is_integer_dtype  # is_numeric_dtype
+from pandas.api.types import is_categorical_dtype, is_integer_dtype, is_bool_dtype  # is_numeric_dtype
 from sklearn import metrics
 
 from collections import namedtuple
 from functools import reduce, partial
 from itertools import chain
 from multiprocessing import Pool
+
 # TODO: Generalize documentation
 # TODO: Should _mapping be mapping? Would I want to give names then?
 
@@ -67,7 +68,11 @@ class Component(object):
         self._parent = reconciler
         self._cluster_ids = cluster_ids
         self._mapping = self._parent._mapping.loc[:, cluster_ids]
-        clusterings = self._mapping.index.get_level_values("clustering").unique()
+        if self._parent.is_subset:
+            empty = np.vectorize(len)(self._mapping) == 0
+            clusterings = self._mapping[~empty].index.get_level_values("clustering")
+        else:
+            clusterings = self._mapping.index.get_level_values("clustering").unique()
         self.settings = self._parent.settings.loc[clusterings]
         # self.clusters = ClusterIndexer(self)
         self.intersect = reduce(
@@ -90,9 +95,11 @@ class Component(object):
         return len(self._mapping)
 
     def __repr__(self):
-        return (f"<Component n_solutions={len(self)}, "
-                f"max_cells={len(self.union)}, "
-                f"min_cells={len(self.intersect)}>")
+        return (
+            f"<Component n_solutions={len(self)}, "
+            f"max_cells={len(self.union)}, "
+            f"min_cells={len(self.intersect)}>"
+        )
 
 
 def reconcile(settings, clusterings, nprocs=1):
@@ -103,7 +110,7 @@ def reconcile(settings, clusterings, nprocs=1):
         clusterings (`pd.DataFrame`)
         nprocs (`int`)
     """
-    assert all(settings.index == clusterings.columns)
+    assert all(settings.index == clusterings.columns) # I should probably save these, right?
     # Check clusterings:
     clust_dtypes = clusterings.dtypes
     if not all(map(is_integer_dtype, clust_dtypes)):
@@ -120,7 +127,7 @@ def reconcile(settings, clusterings, nprocs=1):
     frame = mapping.index.to_frame()
     mapping.index = pd.MultiIndex.from_arrays(
         (frame["clustering"].values, np.arange(frame.shape[0])),
-        names=("clustering", "cluster")
+        names=("clustering", "cluster"),
     )
     # Set cluster names to be unique
     cvals = clusterings.values
@@ -131,7 +138,7 @@ def reconcile(settings, clusterings, nprocs=1):
     graph = igraph.Graph(
         n=len(mapping),
         edges=list(((i, j) for i, j, k in edges)),
-        edge_attrs={"weight": list(k for i, j, k in edges)}
+        edge_attrs={"weight": list(k for i, j, k in edges)},
     )
     return Reconciler(settings, clusterings, mapping, graph)
 
@@ -170,6 +177,7 @@ class Reconciler(object):
         self._obs_names = clusterings.index
         self._mapping = mapping
         self.graph = graph
+        self.is_subset = False  # Place holder, until I implement view type
         # self.clusters = ClusterIndexer(self)
 
     def get_components(self, min_weight, min_cells=2):
@@ -206,6 +214,66 @@ class Reconciler(object):
                 idx.append(c[0])
         return self.settings.loc[idx]
 
+    # Filter funcs
+    # TODO: TEST TEST TEST
+    # TODO: Allow function filtering for filter clusterings?
+    def filter_clusterings(self, clusterings_to_keep):
+        """
+        Take subset of Reconciler, where only `clusterings_to_keep` are present.
+
+        Args:
+            clusterings_to_keep:
+                Indexer into `Reconciler.settings`
+        """
+        if isinstance(clusterings_to_keep, slice):
+            clusterings_to_keep = np.arange(slice.start, slice.stop, slice.range)
+        if isinstance(clusterings_to_keep, range):
+            clusterings_to_keep = np.array(clusterings_to_keep)
+        if not is_integer_dtype(clusterings_to_keep):
+            if is_bool_dtype(clusterings_to_keep):
+                clusterings_to_keep = np.where(clusterings_to_keep)[0]
+        assert is_integer_dtype(clusterings_to_keep)
+        new_settings = self.settings.loc[
+            clusterings_to_keep
+        ]  # Should these be copies?
+        new_clusters = self.clusterings.loc[:, clusterings_to_keep]  # This is a copy?
+        new_mapping = self._mapping.copy()
+        to_remove = ~(
+            new_mapping.index.get_level_values("clustering").isin(clusterings_to_keep)
+        )
+        new_mapping.loc[to_remove] = [
+            np.array([], dtype=self.clusterings.values.dtype) for i in range(to_remove.sum())
+        ]
+        new_rec = Reconciler(new_settings, new_clusters, new_mapping, self.graph)
+        new_rec.is_subset = True
+        return new_rec
+
+    def filter_cells(self, cells_to_keep):
+        """
+        Take subset of Reconciler, where only `cells_to_keep` are present
+
+        Args:
+            cells_to_keep : Integer, boolean or string array-like. 
+                Will be used to index into the clusterings attribute.
+        """
+        if not is_integer_dtype(cells_to_keep):
+            if is_bool_dtype(cells_to_keep):
+                cells_to_keep = np.where(cells_to_keep)[0]
+            else:
+                cells_to_keep = np.where(self._obs_names.isin(cells_to_keep))[0]
+        assert is_integer_dtype(cells_to_keep)
+        cells_to_keep
+        get_subset = partial(np.intersect1d, cells_to_keep, assume_unique=True)
+        new_mapping = self._mapping.apply(get_subset)
+        new_rec = Reconciler(
+            self.settings,
+            self.clusterings.iloc[cells_to_keep, :],
+            new_mapping,
+            self.graph
+        )
+        new_rec.is_subset = True
+        return new_rec
+
 
 def _prep_neighbors(neighbors, mapping):
     for clustering1_id, clustering2_id in neighbors:
@@ -220,7 +288,7 @@ def _prep_neighbors(neighbors, mapping):
             # np.array([set(x) for x in clusters1.values]),
             # np.array([set(x) for x in clusters2.values]),
             clusters1.index.values,
-            clusters2.index.values
+            clusters2.index.values,
         )
 
 
@@ -246,14 +314,8 @@ def _get_edges(clustering1, clustering2, cluster_ids1, cluster_ids2):
             if isize > 0:
                 c1.difference_update(intersect)
                 c2.difference_update(intersect)
-                jaccard_sim = isize / (
-                    ls1[idx1] + ls2[idx2] - isize
-                )
-                edge = (
-                    cluster_ids1[idx1],
-                    cluster_ids2[idx2],
-                    jaccard_sim,
-                )
+                jaccard_sim = isize / (ls1[idx1] + ls2[idx2] - isize)
+                edge = (cluster_ids1[idx1], cluster_ids2[idx2], jaccard_sim)
                 edges.append(edge)
     return edges
 
