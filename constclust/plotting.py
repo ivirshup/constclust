@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import scanpy as sc
 import pandas as pd
 from pandas.api.types import is_float_dtype
-import networkx as nx
 import numpy as np
 from .aggregate import Component
 
@@ -143,12 +142,4 @@ def plot_component(component,
 
 
 def edge_weight_distribution(recon, **kwargs):
-    return sns.distplot(nx.to_pandas_edgelist(recon.graph)["weight"], **kwargs)
-# gs = gridspec.GridSpec(nrows=n_panels_y,
-#                        ncols=n_panels_x,
-#                        left=left,
-#                        right=1-(n_panels_x-1)*left-0.01/n_panels_x,
-#                        bottom=bottom,
-#                        top=1-(n_panels_y-1)*bottom-0.1/n_panels_y,
-#                        hspace=hspace,
-#                        wspace=wspace)
+    return sns.distplot(recon.graph.es["weight"], **kwargs)

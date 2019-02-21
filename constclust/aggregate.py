@@ -1,6 +1,6 @@
 from .paramspace import gen_neighbors
 
-import networkx as nx
+import igraph
 import numba
 import numpy as np
 import pandas as pd
@@ -8,7 +8,6 @@ from sklearn import metrics
 
 from collections import namedtuple
 from functools import reduce, partial
-# from itertools import product
 from itertools import chain
 from multiprocessing import Pool
 # TODO: Generalize documentation
@@ -66,7 +65,7 @@ class Component(object):
     def __init__(self, reconciler, cluster_ids):
         self._parent = reconciler
         self._cluster_ids = cluster_ids
-        self._mapping = self._parent._mapping.loc[cluster_ids]
+        self._mapping = self._parent._mapping.loc[:, cluster_ids]
         clusterings = self._mapping.index.get_level_values("clustering").unique()
         self.settings = self._parent.settings.loc[clusterings]
         # self.clusters = ClusterIndexer(self)
@@ -95,9 +94,6 @@ class Component(object):
                 f"min_cells={len(self.intersect)}>")
 
 
-# This is a placeholder constructor. Eventually it will contain the logic for
-# calculating a Reconciler from settings and clusterings, while the Reconciler
-# "inner constructor" will take these plus the constructed graph and mapping
 def reconcile(settings, clusterings, nprocs=1):
     """Constructor for reconciler object.
 
@@ -107,11 +103,27 @@ def reconcile(settings, clusterings, nprocs=1):
         nprocs (`int`)
     """
     assert all(settings.index == clusterings.columns)
+    clusterings = clusterings.copy()  # This gets mutated
     mapping = gen_mapping(clusterings)
+
+    # TODO: cleanup, this is for transition from networkx to igraph
+    # Fix mapping
+    frame = mapping.index.to_frame()
+    mapping.index = pd.MultiIndex.from_arrays(
+        (frame["clustering"].values, np.arange(frame.shape[0])),
+        names=("clustering", "cluster")
+    )
+    # Set cluster names to be unique
+    cvals = clusterings.values
+    cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
+    assert all(np.unique(cvals) == mapping.index.levels[1])
+
     edges = build_graph(settings, clusterings, mapping=mapping, nprocs=nprocs)
-    # edges = build_graph(settings, clusterings, mapping, nprocs=nprocs)
-    graph = nx.Graph()
-    graph.add_weighted_edges_from(edges)
+    graph = igraph.Graph(
+        n=len(mapping),
+        edges=list(((i, j) for i, j, k in edges)),
+        edge_attrs={"weight": list(k for i, j, k in edges)}
+    )
     return Reconciler(settings, clusterings, mapping, graph)
 
 
@@ -129,16 +141,17 @@ class Reconciler(object):
     clusterings : pd.DataFrame
         Contains cluster assignments for each cell, for each clustering.
         Columns correspond to `.settings` index, while the index correspond
-        to the cells.
+        to the cells. Each cluster is encoded with a unique cluster id.
     _obs_names : pd.Index
         Ordered set for names of the cells. Internally they are refered to by
         integer positions.
     _mapping : pd.Series
-        Series which maps clustering and cluster id to that contents clusters.
-    graph : nx.Graph
-        Weighted graph. Nodes are clusters (identified by tuple of clustering
-        and cluster ids). Edges connect clusters with shared contents. Weight
-        is the Jaccard similarity between the contents of the clusters.
+        Series which maps clustering and cluster id to that clusters contents.
+    graph : igraph.Graph
+        Weighted graph. Nodes are clusters (identified by unique cluster id
+        integer, same as in `.clusterings`). Edges connect clusters with shared
+        contents. Weight is the Jaccard similarity between the contents of the
+        clusters.
     """
 
     def __init__(self, settings, clusterings, mapping, graph):
@@ -148,22 +161,18 @@ class Reconciler(object):
         self._obs_names = clusterings.index
         self._mapping = mapping
         self.graph = graph
-        # self._mapping = gen_mapping(clusterings)
         # self.clusters = ClusterIndexer(self)
-        # self.graph = nx.Graph()
-        # self.graph.add_weighted_edges_from(build_graph(settings, clusterings))
 
     def get_components(self, min_weight, min_cells=2):
         """
         Return connected components of graph, with edges filtered by min_weight
         """
-        sub_g = self.graph.edge_subgraph(
-            filter(
-                lambda x: self.graph.edges[x]["weight"] > min_weight, self.graph.edges
-            )
-        )
+        over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
+        # If vertices are deleted, indices (ids) change
+        sub_g = self.graph.subgraph_edges(over_cutoff, delete_vertices=False)
         comps = []
-        for graph_comp in nx.connected_components(sub_g):
+        # Filter out 1 node components
+        for graph_comp in filter(lambda x: len(x) > 1, sub_g.components()):
             comp = Component(self, list(graph_comp))
             if len(comp.intersect) < min_cells:
                 continue
@@ -201,8 +210,8 @@ def _prep_neighbors(neighbors, mapping):
             # list(map(set, clusters2.values)),
             # np.array([set(x) for x in clusters1.values]),
             # np.array([set(x) for x in clusters2.values]),
-            clustering1_id,
-            clustering2_id
+            clusters1.index.values,
+            clusters2.index.values
         )
 
 
@@ -212,26 +221,28 @@ def _call_get_edges(args):
 
 
 @numba.njit(cache=True)
-def _get_edges(clustering1, clustering2, clustering1_id, clustering2_id):
+def _get_edges(clustering1, clustering2, cluster_ids1, cluster_ids2):
     edges = []
     # Cache set sizes since I mutate the sets
     ls1 = [len(c) for c in clustering1]
     ls2 = [len(c) for c in clustering2]
     cs1 = [set(c) for c in clustering1]
     cs2 = [set(c) for c in clustering2]
-    for id1, c1 in enumerate(cs1):
-        for id2, c2 in enumerate(cs2):
+    for idx1 in range(len(ls1)):
+        for idx2 in range(len(ls2)):
+            c1 = cs1[idx1]
+            c2 = cs2[idx2]
             intersect = c1.intersection(c2)
             isize = len(intersect)
             if isize > 0:
                 c1.difference_update(intersect)
                 c2.difference_update(intersect)
                 jaccard_sim = isize / (
-                    ls1[id1] + ls2[id2] - isize
+                    ls1[idx1] + ls2[idx2] - isize
                 )
                 edge = (
-                    ClusterRef(clustering1_id, id1),
-                    ClusterRef(clustering2_id, id2),
+                    cluster_ids1[idx1],
+                    cluster_ids2[idx2],
                     jaccard_sim,
                 )
                 edges.append(edge)
@@ -246,8 +257,9 @@ def build_graph(settings, clusters, mapping=None, nprocs=1):
     neighbors = gen_neighbors(settings, "oou")  # TODO: Pass ordering args
     if mapping is None:
         mapping = gen_mapping(clusters)
-    args = list(_prep_neighbors(neighbors, mapping))
+    args = _prep_neighbors(neighbors, mapping)
     if nprocs > 1:
+        # TODO: Consider replacing with joblib
         with Pool(nprocs) as p:
             edges = p.map(_call_get_edges, args, chunksize=20)
         graph = chain.from_iterable(edges)
@@ -340,43 +352,3 @@ def _gen_mapping(clusterings):
         values.extend(split_vals)
         keys.extend([(clustering_id, i) for i in range(len(split_vals))])
     return keys, values
-
-
-# @numba.njit
-# def _product(a, b):
-#     for el1 in a:
-#         for el2 in b:
-#             yield (el1, el2)
-
-# @numba.jit
-# def _build_graph(neighbors, mapping):
-#     graph = list()  # edge list
-#     for clustering1, clustering2 in neighbors:
-#         clusters1 = mapping[clustering1]
-#         clusters2 = mapping[clustering2]
-#         for clust1, clust2 in _product(list(clusters1.keys()), list(clusters2.keys())):
-#             intersect = np.intersect1d(
-#                 clusters1[clust1], clusters2[clust2], assume_unique=True)
-#             if len(intersect) > 0:
-#                 edge = ((clustering1, clust1), (clustering2, clust2))
-#                 graph.append(edge)
-#     return graph
-
-
-# def gen_mapping(settings, clusters):
-#     """
-#     Create a mapping from parameters to clusters to contents
-
-#     Args:
-#         settings (pd.DataFrame)
-#         clusters (pd.DataFrame)
-#     """
-#     mapping = dict()
-#     for s in settings.itertuples(index=True):
-#         solution = dict()
-#         cluster = clusters[s.Index]
-#         mapping[s.Index] = solution
-#         for cluster_id in cluster.unique():
-#             solution[cluster_id] = np.where(cluster == cluster_id)[0]
-#     return mapping
-
