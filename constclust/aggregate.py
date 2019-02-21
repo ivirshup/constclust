@@ -4,6 +4,7 @@ import igraph
 import numba
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_categorical_dtype, is_integer_dtype  # is_numeric_dtype
 from sklearn import metrics
 
 from collections import namedtuple
@@ -103,6 +104,14 @@ def reconcile(settings, clusterings, nprocs=1):
         nprocs (`int`)
     """
     assert all(settings.index == clusterings.columns)
+    # Check clusterings:
+    clust_dtypes = clusterings.dtypes
+    if not all(map(is_integer_dtype, clust_dtypes)):
+        wrong_types = {t for t in clust_dtypes if not is_integer_dtype(t)}
+        raise TypeError(
+            "Contents of `clusterings` must be integers dtypes. Found:"
+            " {}".format(wrong_types)
+        )
     clusterings = clusterings.copy()  # This gets mutated
     mapping = gen_mapping(clusterings)
 
