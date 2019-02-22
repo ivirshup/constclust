@@ -320,7 +320,7 @@ def build_graph(settings, clusters, mapping=None, nprocs=1):
     if nprocs > 1:
         # TODO: Consider replacing with joblib
         with Pool(nprocs) as p:
-            edges = p.map(_call_get_edges, args, chunksize=20)
+            edges = p.map(_call_get_edges, args)
         graph = chain.from_iterable(edges)
     else:
         graph = chain.from_iterable(map(_call_get_edges, args))
