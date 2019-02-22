@@ -4,9 +4,10 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scanpy as sc
 import pandas as pd
-from pandas.api.types import is_float_dtype
+from pandas.api.types import is_float_dtype, is_numeric_dtype, is_categorical_dtype
 import numpy as np
 from .aggregate import Component
+from itertools import product
 
 # TODO: Make it possible to have plot objects returned
 # TODO: Think up visualization for the set of components
@@ -97,14 +98,25 @@ def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=s
     if len(set(settings[[x, y]].itertuples(index=False))) != len(settings):
         # raise NotImplementedError("Aggregation of multiple global solutions not yet implemented.")
         settings = settings[settings["random_state"] == 0].copy()
+
+    xlabs = sorted(settings[x].unique())
+    ylabs = sorted(settings[y].unique())
+
     clusters = clusters[settings.index].copy()
-    mapping = dict(zip(settings.index, settings[["n_neighbors", "resolution"]].itertuples(index=False, name=None)))
+    mapping = dict(zip(settings.index, settings[[x, y]].itertuples(index=False, name=None)))
+    # + .5 might make it align better with local plot
+    xpos = np.arange(len(xlabs))# + .5
+    ypos = np.arange(len(ylabs))# + .5
+    pos_map = {}
+    for (xlab, x), (ylab, y) in product(zip(xlabs, xpos), zip(ylabs, ypos)):
+        pos_map[(xlab, ylab)] = (x, y)
     edges = aggregate.build_global_graph(settings, clusters)
+
     lines = []
     colors = []
     for edge in edges:
         color = edge[2]
-        line = [mapping[edge[0]], mapping[edge[1]]]
+        line = [pos_map[mapping[edge[0]]], pos_map[mapping[edge[1]]]]
         colors.append(color)
         lines.append(line)
     lc = mpl.collections.LineCollection(lines, cmap=cmap)
@@ -114,8 +126,13 @@ def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=s
     else:
         fig, ax = plt.subplots()
     ax.add_collection(lc)
-    ax.set_xticks(list(settings[x].unique()))
-    ax.set_yticks(list(settings[y].unique()))
+
+    xstep = _tick_step(ax, xlabs, 0)
+    ystep = _tick_step(ax, ylabs, 1)
+    ax.set(xticks=xpos[::xstep], yticks=ypos[::ystep])
+    fmat = np.vectorize("{:g}".format)
+    ax.set_xticklabels(labels=fmat(xlabs[::xstep]))
+    ax.set_yticklabels(labels=fmat(ylabs[::ystep]))
     ax.invert_yaxis()
     ax.autoscale()
     ax.set_frame_on(False)
@@ -152,3 +169,16 @@ def plot_component(component,
 
 def edge_weight_distribution(recon, **kwargs):
     return sns.distplot(recon.graph.es["weight"], **kwargs)
+
+# Modified from seaborn
+def _tick_step(ax, labels, axis):
+    transform = ax.figure.dpi_scale_trans.inverted()
+    bbox = ax.get_window_extent().transformed(transform)
+    size = [bbox.width, bbox.height][axis]
+    axis = [ax.xaxis, ax.yaxis][axis]
+    tick, = axis.set_ticks([0])
+    fontsize = tick.label.get_size()
+    max_ticks = int(size // (fontsize / 72))
+    tick_every = len(labels) // max_ticks + 1
+    tick_every = 1 if tick_every == 0 else tick_every
+    return tick_every
