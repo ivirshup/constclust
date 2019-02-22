@@ -110,7 +110,7 @@ def reconcile(settings, clusterings, nprocs=1):
         clusterings (`pd.DataFrame`)
         nprocs (`int`)
     """
-    assert all(settings.index == clusterings.columns) # I should probably save these, right?
+    assert all(settings.index == clusterings.columns)  # I should probably save these, right?
     # Check clusterings:
     clust_dtypes = clusterings.dtypes
     if not all(map(is_integer_dtype, clust_dtypes)):
@@ -214,25 +214,17 @@ class Reconciler(object):
                 idx.append(c[0])
         return self.settings.loc[idx]
 
-    # Filter funcs
-    # TODO: TEST TEST TEST
-    # TODO: Allow function filtering for filter clusterings?
-    def filter_clusterings(self, clusterings_to_keep):
+    def subset_clusterings(self, clusterings_to_keep):
         """
         Take subset of Reconciler, where only `clusterings_to_keep` are present.
 
+        Reduces size of both `.settings` and `.clusterings`
+
         Args:
-            clusterings_to_keep:
-                Indexer into `Reconciler.settings`
+            clusterings_to_keep: Indexer into `Reconciler.settings`. Anything that should
+                give the correct result for `reconciler.settings.loc[clusterings_to_keep]`.
         """
-        if isinstance(clusterings_to_keep, slice):
-            clusterings_to_keep = np.arange(slice.start, slice.stop, slice.range)
-        if isinstance(clusterings_to_keep, range):
-            clusterings_to_keep = np.array(clusterings_to_keep)
-        if not is_integer_dtype(clusterings_to_keep):
-            if is_bool_dtype(clusterings_to_keep):
-                clusterings_to_keep = np.where(clusterings_to_keep)[0]
-        assert is_integer_dtype(clusterings_to_keep)
+        clusterings_to_keep = self.settings.loc[clusterings_to_keep].index.values
         new_settings = self.settings.loc[
             clusterings_to_keep
         ]  # Should these be copies?
@@ -248,21 +240,17 @@ class Reconciler(object):
         new_rec.is_subset = True
         return new_rec
 
-    def filter_cells(self, cells_to_keep):
+    def subset_cells(self, cells_to_keep):
         """
         Take subset of Reconciler, where only `cells_to_keep` are present
 
         Args:
-            cells_to_keep : Integer, boolean or string array-like. 
-                Will be used to index into the clusterings attribute.
+            cells_to_keep: I
         """
-        if not is_integer_dtype(cells_to_keep):
-            if is_bool_dtype(cells_to_keep):
-                cells_to_keep = np.where(cells_to_keep)[0]
-            else:
-                cells_to_keep = np.where(self._obs_names.isin(cells_to_keep))[0]
-        assert is_integer_dtype(cells_to_keep)
-        cells_to_keep
+        intmap = pd.Series(
+            np.arange(self.clusterings.shape[0]), index=self.clusterings.index
+        )
+        cells_to_keep = intmap[self.clusterings.loc[cells_to_keep].index.values]
         get_subset = partial(np.intersect1d, cells_to_keep, assume_unique=True)
         new_mapping = self._mapping.apply(get_subset)
         new_rec = Reconciler(
