@@ -263,21 +263,9 @@ class Reconciler(object):
         return new_rec
 
 
-def _prep_neighbors(neighbors, mapping):
-    for clustering1_id, clustering2_id in neighbors:
-        clusters1 = mapping[clustering1_id]
-        clusters2 = mapping[clustering2_id]
-        yield (
-            list(clusters1.values),  # Numba hates array of arrays?
-            list(clusters2.values),
-            # The commented out below do not work for numba reasons 😿
-            # list(map(set, clusters1.values)),
-            # list(map(set, clusters2.values)),
-            # np.array([set(x) for x in clusters1.values]),
-            # np.array([set(x) for x in clusters2.values]),
-            clusters1.index.values,
-            clusters2.index.values,
-        )
+def _prep_neighbors(neighbors, clusterings):
+    for i, j in neighbors:
+        yield clusterings.values[:, i], clusterings.values[:, j]
 
 
 def _call_get_edges(args):
@@ -286,25 +274,35 @@ def _call_get_edges(args):
 
 
 @numba.njit(cache=True)
-def _get_edges(clustering1, clustering2, cluster_ids1, cluster_ids2):
+def _get_edges(clustering1: np.array, clustering2: np.array):
     edges = []
-    # Cache set sizes since I mutate the sets
-    ls1 = [len(c) for c in clustering1]
-    ls2 = [len(c) for c in clustering2]
-    cs1 = [set(c) for c in clustering1]
-    cs2 = [set(c) for c in clustering2]
-    for idx1 in range(len(ls1)):
-        for idx2 in range(len(ls2)):
-            c1 = cs1[idx1]
-            c2 = cs2[idx2]
-            intersect = c1.intersection(c2)
-            isize = len(intersect)
-            if isize > 0:
-                c1.difference_update(intersect)
-                c2.difference_update(intersect)
-                jaccard_sim = isize / (ls1[idx1] + ls2[idx2] - isize)
-                edge = (cluster_ids1[idx1], cluster_ids2[idx2], jaccard_sim)
-                edges.append(edge)
+    offset1 = clustering1.min()
+    offset2 = clustering1.min()
+    # Because of how I've done unique node names, potentially this
+    # could be done in a more generic way by creating a mapping here.
+    offset_clusts1 = clustering1 - offset1
+    offset_clusts2 = clustering2 - offset2
+    # Allocate coincidence matrix
+    nclusts1 = offset_clusts1.max() + 1
+    nclusts2 = offset_clusts2.max() + 1
+    coincidence = np.zeros((nclusts1, nclusts2))
+    # Allocate cell size arrays
+    ncells1 = np.zeros(nclusts1)
+    ncells2 = np.zeros(nclusts2)
+    # Compute lengths of the intersects
+    for cell in range(len(clustering1)):
+        c1 = offset_clusts1[cell]
+        c2 = offset_clusts2[cell]
+        coincidence[c1, c2] += 1
+        ncells1[c1] += 1
+        ncells2[c2] += 1
+    for cidx1, cidx2 in np.ndindex(coincidence.shape):
+        isize = coincidence[cidx1, cidx2]
+        if isize < 1:
+            continue
+        jaccard_sim = isize / (ncells1[cidx1] + ncells2[cidx2] - isize)
+        edge = (cidx1 + offset1, cidx2 + offset2, jaccard_sim)
+        edges.append(edge)
     return edges
 
 
@@ -314,9 +312,9 @@ def build_graph(settings, clusters, mapping=None, nprocs=1):
     """
     graph = list()  # edge list
     neighbors = gen_neighbors(settings, "oou")  # TODO: Pass ordering args
-    if mapping is None:
-        mapping = gen_mapping(clusters)
-    args = _prep_neighbors(neighbors, mapping)
+    # if mapping is None:
+        # mapping = gen_mapping(clusters)
+    args = _prep_neighbors(neighbors, clusters)
     if nprocs > 1:
         # TODO: Consider replacing with joblib
         with Pool(nprocs) as p:
