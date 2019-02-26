@@ -64,14 +64,16 @@ def gen_neighbors(settings, orders=None):
                 continue
             # Is there a better way to do this? Depends on how slow this is
             new_s = s._replace(**{k: ordered_settings[k][pos]})
-            edges.append((reverse_map[s], reverse_map[new_s]))
+            if (new_s in reverse_map) and (s in reverse_map):
+                edges.append((reverse_map[s], reverse_map[new_s]))
         for k, vs in unordered_settings.items():
             if getattr(s, k) != vs[0]:
                 continue
             for u1, u2 in combinations(vs, 2):
                 s1 = s._replace(**{k: u1})
                 s2 = s._replace(**{k: u2})
-                edges.append((reverse_map[s1], reverse_map[s2]))
+                if (s1 in reverse_map) and (s2 in reverse_map):
+                    edges.append((reverse_map[s1], reverse_map[s2]))
     return edges
 
 

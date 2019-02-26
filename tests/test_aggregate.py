@@ -1,4 +1,4 @@
-from constclust.aggregate import reconcile
+from constclust.aggregate import reconcile, gen_neighbors
 from typing import Tuple
 from itertools import product
 import pandas as pd
@@ -47,3 +47,15 @@ def test_subsetting(clustering_run: Tuple[pd.DataFrame, pd.DataFrame]):
     by_settings = recon.subset_clusterings(lambda x: x["a"] < 2)
     assert (len(recon.settings) / 2) == len(by_settings.settings)
     assert (recon.clusterings.shape[1] / 2) == by_settings.clusterings.shape[1]
+
+
+def test_component_neighbors(clustering_run):
+    recon = reconcile(*clustering_run)
+    cs = recon.get_components(.9)
+    all_ns = gen_neighbors(clustering_run[0], "oou")
+    for c in cs:
+        comp_clusterings = c.settings.index
+        subset_all_ns = set(filter(lambda x: (x[0] in comp_clusterings) and (x[1] in comp_clusterings), all_ns))
+        subset_ns = set(gen_neighbors(c.settings, "oou"))
+        assert subset_all_ns == subset_ns
+
