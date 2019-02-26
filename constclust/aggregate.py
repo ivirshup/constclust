@@ -177,7 +177,7 @@ class Reconciler(object):
         self._obs_names = clusterings.index
         self._mapping = mapping
         self.graph = graph
-        self.is_subset = False  # Place holder, until I implement view type
+        self.is_subset = False  # Place holder, until I implement subset type
         # self.clusters = ClusterIndexer(self)
 
     def get_components(self, min_weight, min_cells=2):
@@ -245,7 +245,8 @@ class Reconciler(object):
         Take subset of Reconciler, where only `cells_to_keep` are present
 
         Args:
-            cells_to_keep: I
+            cells_to_keep: Indexer into `Reconciler.clusterings`. Anything that should
+                give the correct result for `reconciler.clusterings.loc[cells_to_keep]`.
         """
         intmap = pd.Series(
             np.arange(self.clusterings.shape[0]), index=self.clusterings.index
@@ -286,7 +287,7 @@ def _get_edges(clustering1: np.array, clustering2: np.array):
     nclusts1 = offset_clusts1.max() + 1
     nclusts2 = offset_clusts2.max() + 1
     coincidence = np.zeros((nclusts1, nclusts2))
-    # Allocate cell size arrays
+    # Allocate cluster size arrays
     ncells1 = np.zeros(nclusts1)
     ncells2 = np.zeros(nclusts2)
     # Compute lengths of the intersects
