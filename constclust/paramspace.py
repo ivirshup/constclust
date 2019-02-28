@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn import metrics
 from itertools import repeat, groupby, product, combinations
-import plotly.graph_objs as go
+# import plotly.graph_objs as go
 
 
 # def gen_neighbors(settings):
