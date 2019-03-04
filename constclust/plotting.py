@@ -25,7 +25,6 @@ def _fix_seaborn_float_labels(axis):
 
 
 # TODO: Add title arg
-# TODO: Change colorbar to discrete
 # TODO: crosstab instead of pivot_table?
 def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
     """
@@ -92,7 +91,6 @@ def umap(component, adata, ax=None, umap_kwargs={}):
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
-# TODO: Make fake grid to plot on so it doesn't look weird when I have log scaled variables
 def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=sns.cm.rocket, ax=None):
     # This should probably aggregate, currently do hacky thing of just subsetting
     if len(set(settings[[x, y]].itertuples(index=False))) != len(settings):
