@@ -138,47 +138,18 @@ def reconcile(settings, clusterings, nprocs=1):
     graph = igraph.Graph(
         n=len(mapping),
         edges=list(((i, j) for i, j, k in edges)),
+        vertex_attrs={"clustering_id": np.arange(len(mapping))},
         edge_attrs={"weight": list(k for i, j, k in edges)},
     )
     return Reconciler(settings, clusterings, mapping, graph)
 
 
-class Reconciler(object):
+class ReconcilerBase(object):
     """
-    Collects and reconciles many clusterings by local (in parameter space)
-    stability.
+    Base type for reconciler.
 
-    Attributes
-    ----------
-    settings : pd.DataFrame
-        Contains settings for all clusterings. Index corresponds to
-        `.clusterings` columns, while columns should correspond to the
-        parameters which were varied.
-    clusterings : pd.DataFrame
-        Contains cluster assignments for each cell, for each clustering.
-        Columns correspond to `.settings` index, while the index correspond
-        to the cells. Each cluster is encoded with a unique cluster id.
-    _obs_names : pd.Index
-        Ordered set for names of the cells. Internally they are refered to by
-        integer positions.
-    _mapping : pd.Series
-        Series which maps clustering and cluster id to that clusters contents.
-    graph : igraph.Graph
-        Weighted graph. Nodes are clusters (identified by unique cluster id
-        integer, same as in `.clusterings`). Edges connect clusters with shared
-        contents. Weight is the Jaccard similarity between the contents of the
-        clusters.
+    Has methods for subsetting implemented, providing data is up to subclass.
     """
-
-    def __init__(self, settings, clusterings, mapping, graph):
-        assert all(settings.index == clusterings.columns)
-        self.settings = settings
-        self.clusterings = clusterings
-        self._obs_names = clusterings.index
-        self._mapping = mapping
-        self.graph = graph
-        self.is_subset = False  # Place holder, until I implement subset type
-        # self.clusters = ClusterIndexer(self)
 
     def get_components(self, min_weight, min_cells=2):
         """
@@ -262,6 +233,44 @@ class Reconciler(object):
         )
         new_rec.is_subset = True
         return new_rec
+
+
+class Reconciler(ReconcilerBase):
+    """
+    Collects and reconciles many clusterings by local (in parameter space)
+    stability.
+
+    Attributes
+    ----------
+    settings : pd.DataFrame
+        Contains settings for all clusterings. Index corresponds to
+        `.clusterings` columns, while columns should correspond to the
+        parameters which were varied.
+    clusterings : pd.DataFrame
+        Contains cluster assignments for each cell, for each clustering.
+        Columns correspond to `.settings` index, while the index correspond
+        to the cells. Each cluster is encoded with a unique cluster id.
+    _obs_names : pd.Index
+        Ordered set for names of the cells. Internally they are refered to by
+        integer positions.
+    _mapping : pd.Series
+        Series which maps clustering and cluster id to that clusters contents.
+    graph : igraph.Graph
+        Weighted graph. Nodes are clusters (identified by unique cluster id
+        integer, same as in `.clusterings`). Edges connect clusters with shared
+        contents. Weight is the Jaccard similarity between the contents of the
+        clusters.
+    """
+
+    def __init__(self, settings, clusterings, mapping, graph):
+        assert all(settings.index == clusterings.columns)
+        self.settings = settings
+        self.clusterings = clusterings
+        self._obs_names = pd.Series(clusterings.index.values, index=np.arange(len(clusterings)))
+        self._mapping = mapping
+        self.graph = graph
+        self.is_subset = False  # Place holder, until I implement subset type
+        # self.clusters = ClusterIndexer(self)
 
 
 def _prep_neighbors(neighbors, clusterings):
