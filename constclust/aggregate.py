@@ -1,4 +1,6 @@
 from .paramspace import gen_neighbors
+from .utils import reverse_series_map, pairs_to_dict
+from datetime import datetime
 
 import igraph
 import numba
@@ -67,6 +69,7 @@ class Component(object):
     def __init__(self, reconciler, cluster_ids):
         self._parent = reconciler
         self._cluster_ids = cluster_ids
+        # TODO: Should a component found via a subset only return the clusters in the subset?
         self._mapping = self._parent._mapping.loc[:, cluster_ids]
         if self._parent.is_subset:
             empty = np.vectorize(len)(self._mapping) == 0
@@ -138,7 +141,7 @@ def reconcile(settings, clusterings, nprocs=1):
     graph = igraph.Graph(
         n=len(mapping),
         edges=list(((i, j) for i, j, k in edges)),
-        vertex_attrs={"clustering_id": np.arange(len(mapping))},
+        vertex_attrs={"cluster_id": np.arange(len(mapping))},
         edge_attrs={"weight": list(k for i, j, k in edges)},
     )
     return Reconciler(settings, clusterings, mapping, graph)
@@ -150,23 +153,6 @@ class ReconcilerBase(object):
 
     Has methods for subsetting implemented, providing data is up to subclass.
     """
-
-    def get_components(self, min_weight, min_cells=2):
-        """
-        Return connected components of graph, with edges filtered by min_weight
-        """
-        over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
-        # If vertices are deleted, indices (ids) change
-        sub_g = self.graph.subgraph_edges(over_cutoff, delete_vertices=False)
-        comps = []
-        # Filter out 1 node components
-        for graph_comp in filter(lambda x: len(x) > 1, sub_g.components()):
-            comp = Component(self, list(graph_comp))
-            if len(comp.intersect) < min_cells:
-                continue
-            comps.append(comp)
-        comps.sort(key=lambda x: (len(x.settings), len(x.intersect)), reverse=True)
-        return comps
 
     def get_param_range(self, clusters):
         """
@@ -207,7 +193,7 @@ class ReconcilerBase(object):
         new_mapping.loc[to_remove] = [
             np.array([], dtype=self.clusterings.values.dtype) for i in range(to_remove.sum())
         ]
-        new_rec = Reconciler(new_settings, new_clusters, new_mapping, self.graph)
+        new_rec = ReconcilerSubset(self._parent, new_settings, new_clusters, new_mapping, self.graph)
         new_rec.is_subset = True
         return new_rec
 
@@ -219,13 +205,12 @@ class ReconcilerBase(object):
             cells_to_keep: Indexer into `Reconciler.clusterings`. Anything that should
                 give the correct result for `reconciler.clusterings.loc[cells_to_keep]`.
         """
-        intmap = pd.Series(
-            np.arange(self.clusterings.shape[0]), index=self.clusterings.index
-        )
+        intmap = reverse_series_map(self._obs_names)
         cells_to_keep = intmap[self.clusterings.loc[cells_to_keep].index.values]
         get_subset = partial(np.intersect1d, cells_to_keep, assume_unique=True)
         new_mapping = self._mapping.apply(get_subset)
-        new_rec = Reconciler(
+        new_rec = ReconcilerSubset(
+            self._parent,
             self.settings,
             self.clusterings.iloc[cells_to_keep, :],
             new_mapping,
@@ -233,6 +218,30 @@ class ReconcilerBase(object):
         )
         new_rec.is_subset = True
         return new_rec
+
+
+class ReconcilerSubset(ReconcilerBase):
+    """Subset of a reconciler"""
+    def __init__(self, parent, settings, clusterings, mapping, graph):
+        assert isinstance(parent, Reconciler)
+        self._parent = parent
+        self.settings = settings
+        self.clusterings = clusterings
+        self._obs_names = parent._obs_names[parent._obs_names.isin(clusterings.index)]
+        # self._obs_names = self.clusterings.index
+        self._mapping = mapping
+        self.graph = graph
+
+    def get_components(self, min_weight, min_cells=2):
+        """
+        Return connected components of graph, with edges filtered by min_weight
+
+        """
+        clusters = self.clusterings.stack().unique()
+        return self._parent.find_components(min_weight, clusters, min_cells)
+    # @property
+    # def graph(self):
+        
 
 
 class Reconciler(ReconcilerBase):
@@ -264,6 +273,7 @@ class Reconciler(ReconcilerBase):
 
     def __init__(self, settings, clusterings, mapping, graph):
         assert all(settings.index == clusterings.columns)
+        self._parent = self  # Kinda hacky
         self.settings = settings
         self.clusterings = clusterings
         self._obs_names = pd.Series(clusterings.index.values, index=np.arange(len(clusterings)))
@@ -272,6 +282,75 @@ class Reconciler(ReconcilerBase):
         self.is_subset = False  # Place holder, until I implement subset type
         # self.clusters = ClusterIndexer(self)
 
+    def find_components(self, min_weight, clusters, min_cells=2):
+        """
+        Return components from filtered graph which contain specified clusters.
+
+        Args:
+            min_weight (float):
+                Minimum weight for edges to be kept in graph. Should be over 0.5.
+            clusters (np.array[int]):
+                Clusters which you'd like to fin
+        """
+        # Subset graph
+        over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
+        sub_g = self.graph.subgraph_edges(over_cutoff, delete_vertices=True)
+        # Mapping from cluster_id to node_id
+        cidtonode = dict(map(tuple, map(reversed, enumerate(sub_g.vs["cluster_id"]))))
+        # nodemap = np.frompyfunc(cidtonode.get, 1, 1)
+
+        # Get mapping from clustering to clusters
+        clusteringtocluster = {k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping.index)).items()}
+        # Only look for clusters in graph
+        clusters = np.intersect1d(clusters, sub_g.vs["cluster_id"], assume_unique=True)
+
+        # Create sieve
+        to_visit = np.zeros(self.graph.vcount(), dtype=bool)
+        to_visit[clusters] = True
+
+        # Figure out the clusterings I want to visit
+        # I know that no two clusters from one clustering can be in the same component (should probably put limit on jaccard score to ensure this)
+        # This means I can explore each component at the same time, or at least know I won't be exploring the same one twice
+        frame = self._mapping.index.to_frame().reset_index(drop=True)
+        clusterings = frame.loc[lambda x: x["cluster"].isin(clusters)]["clustering"].values
+        clustering_queue = list(clusterings)
+
+        components = list()
+        while len(clustering_queue) > 0:
+            clustering = clustering_queue.pop()
+            clusters = clusteringtocluster[clustering]
+            clusters = clusters[np.where(to_visit[clusters])[0]] 
+            if not any(to_visit[clusters]):
+                continue
+            for cluster in clusters:
+                component = np.sort([x["cluster_id"] for x in sub_g.bfsiter(cidtonode[cluster])])
+                components.append(component)
+                to_visit[component] = False
+        # Format and return components
+        out = [Component(self, c) for c in components]  # This is slow, probably due to finding the union and intersect
+        return sorted(
+            filter(lambda x: len(x.intersect) >= min_cells, out),
+            key=lambda x: (len(x.settings), len(x.intersect)),
+            reverse=True
+        )
+
+    def get_components(self, min_weight, min_cells=2):
+        """
+        Return connected components of graph, with edges filtered by min_weight
+        """
+        over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
+        # If vertices are deleted, indices (ids) change
+        sub_g = self.graph.subgraph_edges(over_cutoff, delete_vertices=True)
+        comps = []
+        # Filter out 1 node components
+        cids = np.array(sub_g.vs["cluster_id"])
+        for graph_comp in filter(lambda x: len(x) > 1, sub_g.components()):
+            comp = Component(self, cids[list(graph_comp)])
+            if len(comp.intersect) < min_cells:
+                continue
+            comps.append(comp)
+        comps.sort(key=lambda x: (len(x.settings), len(x.intersect)), reverse=True)
+        return comps
 
 def _prep_neighbors(neighbors, clusterings):
     for i, j in neighbors:
