@@ -156,18 +156,10 @@ class ReconcilerBase(object):
         clusterings_to_keep = self.settings.loc[clusterings_to_keep].index.values
         new_settings = self.settings.loc[clusterings_to_keep]  # Should these be copies?
         new_clusters = self.clusterings.loc[:, clusterings_to_keep]  # This is a copy?
-        new_mapping = self._mapping.copy()
-        to_remove = ~(
-            new_mapping.index.get_level_values("clustering").isin(clusterings_to_keep)
-        )
-        new_mapping.loc[to_remove] = [
-            np.array([], dtype=self.clusterings.values.dtype)
-            for i in range(to_remove.sum())
-        ]
-        new_rec = ReconcilerSubset(
+        new_mapping = self._mapping[np.isin(self._mapping.index.get_level_values("clustering"), clusterings_to_keep)]
+        return ReconcilerSubset(
             self._parent, new_settings, new_clusters, new_mapping, self.graph
         )
-        return new_rec
 
     def subset_cells(self, cells_to_keep):
         """
@@ -179,12 +171,13 @@ class ReconcilerBase(object):
         """
         intmap = reverse_series_map(self._obs_names)
         cells_to_keep = intmap[self.clusterings.loc[cells_to_keep].index.values]
-        get_subset = partial(np.intersect1d, cells_to_keep, assume_unique=True)
-        new_mapping = self._mapping.apply(get_subset)
+        new_clusterings = self.clusterings.iloc[cells_to_keep, :]
+        new_mapping = gen_mapping(new_clusterings).apply(lambda x: cells_to_keep.values[x])
+        # TODO: test how long this takes
         new_rec = ReconcilerSubset(
             self._parent,
             self.settings,
-            self.clusterings.iloc[cells_to_keep, :],
+            new_clusterings,
             new_mapping,
             self.graph,
         )
@@ -192,24 +185,52 @@ class ReconcilerBase(object):
 
 
 class ReconcilerSubset(ReconcilerBase):
-    """Subset of a reconciler"""
+    """
+    Subset of a reconciler
+
+    Attributes
+    ----------
+    _parent: `Reconciler`
+        `Reconciler` this subset was derived from.
+    settings: `pd.DataFrame`
+        Settings for clusterings in this subset.
+    clusterings: `pd.DataFrame`
+        Clusterings contained in this subset.
+    graph: `igraph.Graph`
+        Reference to graph from parent.
+    _mapping: `pd.Series`
+        `pd.Series` with `MultiIndex`. Unlike the `_mapping` from `Reconciler`, this
+        does not neccesarily have all clusters, so ranges of clusters cannot be assumed
+        to be contiguous. Additionally, you can't just index into this with cluster_ids
+        as positions.
+    _obs_names: `pd.Series`
+        Maps from integer position to input cell name.
+    """
 
     def __init__(self, parent, settings, clusterings, mapping, graph):
-        assert isinstance(parent, Reconciler)
+        # assert isinstance(parent, Reconciler)  #  Can fail when using autoreloader
+        assert all(settings.index == clusterings.columns)
+        assert all(mapping.index.get_level_values("clustering").unique().isin(settings.index))
         self._parent = parent
         self.settings = settings
         self.clusterings = clusterings
-        self._obs_names = parent._obs_names[parent._obs_names.isin(clusterings.index)]
+        self._obs_names = parent._obs_names[parent._obs_names.isin(clusterings.index)]  # Ordering
         # self._obs_names = self.clusterings.index
         self._mapping = mapping
         self.graph = graph
 
+    def find_components(self, min_weight, clusters, min_cells=2):
+        # This is actually a very slow check. Maybe I should wait on it?
+        # TODO: I've modified the code, check speed and consider if this is really what I want.
+        # if not np.isin(clusters, self._mapping.get_level_values("cluster")).all():
+        #     raise ValueError("")
+        return self._parent.find_components(min_weight, clusters, min_cells=2)
+
     def get_components(self, min_weight, min_cells=2):
         """
         Return connected components of graph, with edges filtered by min_weight
-
         """
-        clusters = self.clusterings.stack().unique()
+        clusters = self._mapping.index.get_level_values("cluster")
         return self._parent.find_components(min_weight, clusters, min_cells)
 
 
@@ -228,21 +249,26 @@ class Reconciler(ReconcilerBase):
         Contains cluster assignments for each cell, for each clustering.
         Columns correspond to `.settings` index, while the index correspond
         to the cells. Each cluster is encoded with a unique cluster id.
-    _obs_names : pd.Index
-        Ordered set for names of the cells. Internally they are refered to by
-        integer positions.
-    _mapping : pd.Series
-        Series which maps clustering and cluster id to that clusters contents.
     graph : igraph.Graph
         Weighted graph. Nodes are clusters (identified by unique cluster id
         integer, same as in `.clusterings`). Edges connect clusters with shared
         contents. Weight is the Jaccard similarity between the contents of the
         clusters.
+    _obs_names : pd.Index
+        Ordered set for names of the cells. Internally they are refered to by
+        integer positions.
+    _mapping : pd.Series
+        `pd.Series` with a `MultiIndex`. Index has levels `clustering` and `cluster`. 
+        Each position in index should have a unique value at level "cluster", which
+        corresponds to a cluster in the clustering dataframe. Values are np.arrays 
+        with indices of cells in relevant cluster. This should be considered immutable,
+        though this is not the case for `ReconcilerSubset`s.
+        Series with MultiIndex with levels clustering and cluster id to that clusters contents.
     """
 
     def __init__(self, settings, clusterings, mapping, graph):
         assert all(settings.index == clusterings.columns)
-        self._parent = self  # Kinda hacky
+        self._parent = self  # Kinda hacky, could maybe remove
         self.settings = settings
         self.clusterings = clusterings
         self._obs_names = pd.Series(
@@ -259,7 +285,7 @@ class Reconciler(ReconcilerBase):
             min_weight (float):
                 Minimum weight for edges to be kept in graph. Should be over 0.5.
             clusters (np.array[int]):
-                Clusters which you'd like to fin
+                Clusters which you'd like to search from.
         """
         # Subset graph
         over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
@@ -269,8 +295,9 @@ class Reconciler(ReconcilerBase):
         # nodemap = np.frompyfunc(cidtonode.get, 1, 1)
 
         # Get mapping from clustering to clusters
+        # Because this is an Reconciler object, we can just index by position into the mapping
         clusteringtocluster = {
-            k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping.index)).items()
+            k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping[clusters].index)).items()
         }
         # Only look for clusters in graph
         clusters = np.intersect1d(clusters, sub_g.vs["cluster_id"], assume_unique=True)
@@ -289,11 +316,11 @@ class Reconciler(ReconcilerBase):
         components = list()
         while len(clustering_queue) > 0:
             clustering = clustering_queue.pop()
-            clusters = clusteringtocluster[clustering]
-            clusters = clusters[np.where(to_visit[clusters])[0]]  # Filtering
-            if not any(to_visit[clusters]):
+            foundclusters = clusteringtocluster[clustering]
+            foundclusters = foundclusters[np.where(to_visit[foundclusters])[0]]  # Filtering
+            if not any(to_visit[foundclusters]):
                 continue
-            for cluster in clusters:
+            for cluster in foundclusters:
                 component = np.sort(
                     [x["cluster_id"] for x in sub_g.bfsiter(cidtonode[cluster])]
                 )
@@ -430,6 +457,7 @@ def _gen_mapping(clusterings):
     values = []
     for clustering_id in np.arange(n_clusts):
         clustering = clusterings[:, clustering_id]
+        unique_vals = np.unique(clustering)
         sorted_idxs = np.argsort(clustering, kind="mergesort")
         sorted_vals = clustering[sorted_idxs]
         indices = list(np.where(np.diff(sorted_vals))[0] + 1)
@@ -444,7 +472,7 @@ def _gen_mapping(clusterings):
         # Without numba
         # split_vals = np.split(sorted_idxs, indices)
         values.extend(split_vals)
-        keys.extend([(clustering_id, i) for i in range(len(split_vals))])
+        keys.extend([(clustering_id, u) for u in unique_vals])
     return keys, values
 
 
