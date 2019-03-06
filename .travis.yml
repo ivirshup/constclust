@@ -1,8 +1,18 @@
 language: python
+sudo: required
+dist: xenial
+
+addons:
+  apt:
+    packages:
+      - libhdf5-serial-dev
+
+cache: pip
+
 python:
   - "3.6"
   - "3.7"
-cache: pip
+
 install:
   - pip install -e .[dev]
 script:
