@@ -6,12 +6,17 @@ import igraph
 import numba
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_categorical_dtype, is_integer_dtype, is_bool_dtype  # is_numeric_dtype
+from pandas.api.types import (
+    is_categorical_dtype,
+    is_integer_dtype,
+    is_bool_dtype,
+)  # is_numeric_dtype
 from sklearn import metrics
 
 from collections import namedtuple
 from functools import reduce, partial
 from itertools import chain
+from operator import and_
 from multiprocessing import Pool
 
 # TODO: Generalize documentation
@@ -58,6 +63,8 @@ class Component(object):
     settings : pd.DataFrame
         Subset of parents settings. Contains only settings for clustering
         which appear in this component.
+    cluster_ids : `np.array`
+        Which clusters are in this component
     _mapping : pd.Series
         Partial view of parents `_mapping`.
     intersect : np.array
@@ -68,20 +75,16 @@ class Component(object):
 
     def __init__(self, reconciler, cluster_ids):
         self._parent = reconciler
-        self._cluster_ids = cluster_ids
+        self.cluster_ids = np.sort(cluster_ids)
         # TODO: Should a component found via a subset only return the clusters in the subset?
-        self._mapping = self._parent._mapping.loc[:, cluster_ids]
-        if self._parent.is_subset:
-            empty = np.vectorize(len)(self._mapping) == 0
-            clusterings = self._mapping[~empty].index.get_level_values("clustering")
-        else:
-            clusterings = self._mapping.index.get_level_values("clustering").unique()
-        self.settings = self._parent.settings.loc[clusterings]
-        # self.clusters = ClusterIndexer(self)
-        self.intersect = reduce(
-            partial(np.intersect1d, assume_unique=True), self._mapping.values
-        )
-        self.union = reduce(np.union1d, self._mapping.values)
+        obs_names = self._parent.clusterings.index
+        present = self._parent.clusterings.isin(cluster_ids).values.copy()
+        clusterings_found_bool = present.any(axis=0)
+        clusterings_found = present[:, clusterings_found_bool]
+        # clustering_ids = present.columns[clusterings_found]
+        self.settings = self._parent.settings.loc[clusterings_found_bool]
+        self.intersect = obs_names[clusterings_found.all(axis=1)]
+        self.union = obs_names[clusterings_found.any(axis=1)]
 
     def one_hot(self, selection="intersect"):
         encoding = np.zeros(self._parent.clusterings.shape[0], dtype=bool)
@@ -113,7 +116,9 @@ def reconcile(settings, clusterings, nprocs=1):
         clusterings (`pd.DataFrame`)
         nprocs (`int`)
     """
-    assert all(settings.index == clusterings.columns)  # I should probably save these, right?
+    assert all(
+        settings.index == clusterings.columns
+    )  # I should probably save these, right?
     # Check clusterings:
     clust_dtypes = clusterings.dtypes
     if not all(map(is_integer_dtype, clust_dtypes)):
@@ -182,18 +187,19 @@ class ReconcilerBase(object):
                 give the correct result for `reconciler.settings.loc[clusterings_to_keep]`.
         """
         clusterings_to_keep = self.settings.loc[clusterings_to_keep].index.values
-        new_settings = self.settings.loc[
-            clusterings_to_keep
-        ]  # Should these be copies?
+        new_settings = self.settings.loc[clusterings_to_keep]  # Should these be copies?
         new_clusters = self.clusterings.loc[:, clusterings_to_keep]  # This is a copy?
         new_mapping = self._mapping.copy()
         to_remove = ~(
             new_mapping.index.get_level_values("clustering").isin(clusterings_to_keep)
         )
         new_mapping.loc[to_remove] = [
-            np.array([], dtype=self.clusterings.values.dtype) for i in range(to_remove.sum())
+            np.array([], dtype=self.clusterings.values.dtype)
+            for i in range(to_remove.sum())
         ]
-        new_rec = ReconcilerSubset(self._parent, new_settings, new_clusters, new_mapping, self.graph)
+        new_rec = ReconcilerSubset(
+            self._parent, new_settings, new_clusters, new_mapping, self.graph
+        )
         new_rec.is_subset = True
         return new_rec
 
@@ -214,7 +220,7 @@ class ReconcilerBase(object):
             self.settings,
             self.clusterings.iloc[cells_to_keep, :],
             new_mapping,
-            self.graph
+            self.graph,
         )
         new_rec.is_subset = True
         return new_rec
@@ -222,6 +228,7 @@ class ReconcilerBase(object):
 
 class ReconcilerSubset(ReconcilerBase):
     """Subset of a reconciler"""
+
     def __init__(self, parent, settings, clusterings, mapping, graph):
         assert isinstance(parent, Reconciler)
         self._parent = parent
@@ -239,9 +246,9 @@ class ReconcilerSubset(ReconcilerBase):
         """
         clusters = self.clusterings.stack().unique()
         return self._parent.find_components(min_weight, clusters, min_cells)
+
     # @property
     # def graph(self):
-        
 
 
 class Reconciler(ReconcilerBase):
@@ -276,7 +283,9 @@ class Reconciler(ReconcilerBase):
         self._parent = self  # Kinda hacky
         self.settings = settings
         self.clusterings = clusterings
-        self._obs_names = pd.Series(clusterings.index.values, index=np.arange(len(clusterings)))
+        self._obs_names = pd.Series(
+            clusterings.index.values, index=np.arange(len(clusterings))
+        )
         self._mapping = mapping
         self.graph = graph
         self.is_subset = False  # Place holder, until I implement subset type
@@ -300,7 +309,9 @@ class Reconciler(ReconcilerBase):
         # nodemap = np.frompyfunc(cidtonode.get, 1, 1)
 
         # Get mapping from clustering to clusters
-        clusteringtocluster = {k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping.index)).items()}
+        clusteringtocluster = {
+            k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping.index)).items()
+        }
         # Only look for clusters in graph
         clusters = np.intersect1d(clusters, sub_g.vs["cluster_id"], assume_unique=True)
 
@@ -312,26 +323,30 @@ class Reconciler(ReconcilerBase):
         # I know that no two clusters from one clustering can be in the same component (should probably put limit on jaccard score to ensure this)
         # This means I can explore each component at the same time, or at least know I won't be exploring the same one twice
         frame = self._mapping.index.to_frame().reset_index(drop=True)
-        clusterings = frame.loc[lambda x: x["cluster"].isin(clusters)]["clustering"].values
-        clustering_queue = list(clusterings)
+        clusterings = frame.loc[lambda x: x["cluster"].isin(clusters)]["clustering"]
+        clustering_queue = clusterings.tolist()
 
         components = list()
         while len(clustering_queue) > 0:
             clustering = clustering_queue.pop()
             clusters = clusteringtocluster[clustering]
-            clusters = clusters[np.where(to_visit[clusters])[0]] 
+            clusters = clusters[np.where(to_visit[clusters])[0]]  # Filtering
             if not any(to_visit[clusters]):
                 continue
             for cluster in clusters:
-                component = np.sort([x["cluster_id"] for x in sub_g.bfsiter(cidtonode[cluster])])
+                component = np.sort(
+                    [x["cluster_id"] for x in sub_g.bfsiter(cidtonode[cluster])]
+                )
                 components.append(component)
                 to_visit[component] = False
         # Format and return components
-        out = [Component(self, c) for c in components]  # This is slow, probably due to finding the union and intersect
+        out = [
+            Component(self, c) for c in components
+        ]  # This is slow, probably due to finding the union and intersect
         return sorted(
             filter(lambda x: len(x.intersect) >= min_cells, out),
             key=lambda x: (len(x.settings), len(x.intersect)),
-            reverse=True
+            reverse=True,
         )
 
     def get_components(self, min_weight, min_cells=2):
@@ -351,6 +366,7 @@ class Reconciler(ReconcilerBase):
             comps.append(comp)
         comps.sort(key=lambda x: (len(x.settings), len(x.intersect)), reverse=True)
         return comps
+
 
 def _prep_neighbors(neighbors, clusterings):
     for i, j in neighbors:
@@ -402,7 +418,7 @@ def build_graph(settings, clusters, mapping=None, nprocs=1):
     graph = list()  # edge list
     neighbors = gen_neighbors(settings, "oou")  # TODO: Pass ordering args
     # if mapping is None:
-        # mapping = gen_mapping(clusters)
+    # mapping = gen_mapping(clusters)
     args = _prep_neighbors(neighbors, clusters)
     if nprocs > 1:
         # TODO: Consider replacing with joblib
@@ -501,11 +517,14 @@ def _gen_mapping(clusterings):
 
 
 def comp_stats(comps):
-    stats = pd.DataFrame({
-        "n_clusts": [len(c) for c in comps],
-        "intersect": [len(c.intersect) for c in comps],
-        "union": [len(c.union) for c in comps]
-    })
+    stats = pd.DataFrame(
+        {
+            "n_clusts": [len(c) for c in comps],
+            "intersect": [len(c.intersect) for c in comps],
+            "union": [len(c.union) for c in comps],
+        }
+    )
     for col in stats:
         stats[f"log1p_{col}"] = np.log1p(stats[col])
     return stats
+
