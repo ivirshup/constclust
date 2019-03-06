@@ -1,0 +1,10 @@
+scanpy>=1.4
+numba>=0.42.1
+pandas>= 0.24.1
+scikit-learn
+numpy
+scipy
+python-igraph
+matplotlib
+seaborn
+leidenalg
