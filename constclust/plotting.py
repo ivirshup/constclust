@@ -79,8 +79,8 @@ def umap(component, adata, ax=None, umap_kwargs={}):
     # if not all(cell_names.isin(adata.obs_names)):
         # raise ValueError("Counldn't find all cells in component's parent in adata.")
     cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
-    for cluster in component._mapping:
-        cell_value[cluster] += 1
+    for cluster in component.cluster_ids:
+        cell_value[component._parent._mapping.iloc[cluster]] += 1
     cell_value = cell_value / cell_value.max()
     adata.obs["_tmp"] = cell_value
     if (len(cell_names) < len(adata.obs_names)):
