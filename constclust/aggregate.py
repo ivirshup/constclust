@@ -65,8 +65,6 @@ class Component(object):
         which appear in this component.
     cluster_ids : `np.array`
         Which clusters are in this component
-    _mapping : pd.Series
-        Partial view of parents `_mapping`.
     intersect : np.array
         Intersect of clusters in this component.
     union : np.array
@@ -77,14 +75,12 @@ class Component(object):
         self._parent = reconciler
         self.cluster_ids = np.sort(cluster_ids)
         # TODO: Should a component found via a subset only return the clusters in the subset?
-        obs_names = self._parent.clusterings.index
-        present = self._parent.clusterings.isin(cluster_ids).values.copy()
-        clusterings_found_bool = present.any(axis=0)
-        clusterings_found = present[:, clusterings_found_bool]
-        # clustering_ids = present.columns[clusterings_found]
-        self.settings = self._parent.settings.loc[clusterings_found_bool]
-        self.intersect = obs_names[clusterings_found.all(axis=1)]
-        self.union = obs_names[clusterings_found.any(axis=1)]
+        clusterings = self._parent._mapping.index.get_level_values("clustering")[cluster_ids]  # Should already be unique
+        self.settings = self._parent.settings.loc[clusterings]
+        cells = self._parent._mapping.iloc[cluster_ids].values
+        # TODO: I could just figure out how big these are, and make their contents lazily evaluated. I think this would be a pretty big speed up for interactive work.
+        self.intersect = reduce(partial(np.intersect1d, assume_unique=True), cells)
+        self.union = reduce(np.union1d, cells)
 
     def one_hot(self, selection="intersect"):
         encoding = np.zeros(self._parent.clusterings.shape[0], dtype=bool)
@@ -98,7 +94,7 @@ class Component(object):
             )
 
     def __len__(self):
-        return len(self._mapping)
+        return len(self.cluster_ids)
 
     def __repr__(self):
         return (
@@ -159,6 +155,7 @@ class ReconcilerBase(object):
     Has methods for subsetting implemented, providing data is up to subclass.
     """
 
+    # TODO should I remove this?
     def get_param_range(self, clusters):
         """
         Given a set of clusters, returns the range of parameters for which they were calculated.
@@ -527,4 +524,3 @@ def comp_stats(comps):
     for col in stats:
         stats[f"log1p_{col}"] = np.log1p(stats[col])
     return stats
-
