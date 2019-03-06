@@ -13,43 +13,12 @@ from pandas.api.types import (
 )  # is_numeric_dtype
 from sklearn import metrics
 
-from collections import namedtuple
 from functools import reduce, partial
 from itertools import chain
-from operator import and_
 from multiprocessing import Pool
 
 # TODO: Generalize documentation
 # TODO: Should _mapping be mapping? Would I want to give names then?
-
-ClusterRef = namedtuple("ClusterRef", ("clustering_id", "cluster_id"))
-
-
-# TODO: Have views map back to clustering index names
-# Alternatively, do I just want to use a mapping?
-# I wouldn't get those index names, but I can get that later.
-class ClusterIndexer(object):
-    """
-    API convenience which allows indexing access to parent Reconciler's
-    clusters.
-    """
-
-    def __init__(self, parent):
-        self._parent = parent
-
-    def __len__(self):
-        return len(self._parent._mapping)
-
-    # Note: I might want to modify this one in the future, for specialized access
-    def __getitem__(self, key):
-        return self._parent._mapping[key]
-
-    def __iter__(self):
-        return self._parent._mapping.__iter__()
-
-    def __contains__(self, key):
-        # This should be able to check for a clustering, or a cluster
-        return self._parent._mapping.__contains__(key)
 
 
 class Component(object):
@@ -105,7 +74,8 @@ class Component(object):
 
 
 def reconcile(settings, clusterings, nprocs=1):
-    """Constructor for reconciler object.
+    """
+    Constructor for reconciler object.
 
     Args:
         settings (`pd.DataFrame`)
@@ -163,7 +133,7 @@ class ReconcilerBase(object):
         Parameters
         ----------
         clusters : Union[Collection[ClusterRef], Collection[Int]]
-            If its a collection of ints, I'll say that was a range of parameter ids. 
+            If its a collection of ints, I'll say that was a range of parameter ids.
         """
         idx = []
         for c in clusters:
@@ -197,7 +167,6 @@ class ReconcilerBase(object):
         new_rec = ReconcilerSubset(
             self._parent, new_settings, new_clusters, new_mapping, self.graph
         )
-        new_rec.is_subset = True
         return new_rec
 
     def subset_cells(self, cells_to_keep):
@@ -219,7 +188,6 @@ class ReconcilerBase(object):
             new_mapping,
             self.graph,
         )
-        new_rec.is_subset = True
         return new_rec
 
 
@@ -243,9 +211,6 @@ class ReconcilerSubset(ReconcilerBase):
         """
         clusters = self.clusterings.stack().unique()
         return self._parent.find_components(min_weight, clusters, min_cells)
-
-    # @property
-    # def graph(self):
 
 
 class Reconciler(ReconcilerBase):
@@ -285,8 +250,6 @@ class Reconciler(ReconcilerBase):
         )
         self._mapping = mapping
         self.graph = graph
-        self.is_subset = False  # Place holder, until I implement subset type
-        # self.clusters = ClusterIndexer(self)
 
     def find_components(self, min_weight, clusters, min_cells=2):
         """
@@ -425,34 +388,6 @@ def build_graph(settings, clusters, mapping=None, nprocs=1):
     else:
         graph = chain.from_iterable(map(_call_get_edges, args))
     return list(graph)
-
-
-# def build_graph(settings, clusters, mapping=None):
-#     """
-#     Build a graph of overlapping clusters (for neighbors in parameter space).
-#     """
-#     graph = list()  # edge list
-#     neighbors = gen_neighbors(settings, "oou") # TODO: Pass ordering args
-#     if mapping is not None:
-#         mapping = gen_mapping(clusters)
-#     for clustering1, clustering2 in neighbors:
-#         clusters1 = mapping[clustering1]
-#         clusters2 = mapping[clustering2]
-#         for (id1, clust1), (id2, clust2) in product(
-#             clusters1.items(), clusters2.items()
-#         ):
-#             intersect = np.intersect1d(clust1, clust2, assume_unique=True)
-#             if len(intersect) > 0:
-#                 jaccard_sim = intersect.size / (
-#                     clust1.size + clust2.size - intersect.size
-#                 )
-#                 edge = (
-#                     ClusterRef(clustering1, id1),
-#                     ClusterRef(clustering2, id2),
-#                     jaccard_sim,
-#                 )
-#                 graph.append(edge)
-#     return graph
 
 
 def build_global_graph(settings, clusters):
