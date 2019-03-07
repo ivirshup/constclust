@@ -124,6 +124,9 @@ class ReconcilerBase(object):
 
     Has methods for subsetting implemented, providing data is up to subclass.
     """
+    @property
+    def cluster_ids(self):
+        return self._mapping.index.get_level_values("cluster")
 
     # TODO should I remove this?
     def get_param_range(self, clusters):
@@ -198,6 +201,8 @@ class ReconcilerSubset(ReconcilerBase):
         Clusterings contained in this subset.
     graph: `igraph.Graph`
         Reference to graph from parent.
+    cluster_ids: `np.array[int]`
+        Integer ids of all clusters in this subset.
     _mapping: `pd.Series`
         `pd.Series` with `MultiIndex`. Unlike the `_mapping` from `Reconciler`, this
         does not neccesarily have all clusters, so ranges of clusters cannot be assumed
@@ -254,6 +259,8 @@ class Reconciler(ReconcilerBase):
         integer, same as in `.clusterings`). Edges connect clusters with shared
         contents. Weight is the Jaccard similarity between the contents of the
         clusters.
+    cluster_ids: `np.array[int]`
+        Integer ids of all clusters in this Reconciler.
     _obs_names : pd.Index
         Ordered set for names of the cells. Internally they are refered to by
         integer positions.
