@@ -44,14 +44,30 @@ def test_reconcile(clustering_run: Tuple[pd.DataFrame, pd.DataFrame]):
 
 def test_subsetting(clustering_run: Tuple[pd.DataFrame, pd.DataFrame]):
     recon = reconcile(*clustering_run)
-    by_cells = recon.subset_cells(recon._obs_names[slice(50)])
-    assert all(by_cells._obs_names == recon._obs_names[slice(50)])
-    assert len(by_cells.get_components(0.9)) == 1
+    by_cells = recon.subset_cells(recon._obs_names[slice(50, 100)])
+    by_cells_comps = by_cells.get_components(0.9)
+    assert all(by_cells._obs_names == recon._obs_names[slice(50, 100)])
+    assert len(by_cells_comps) == 1
+    assert all(np.sort(by_cells_comps[0].intersect_names) == np.sort(by_cells.clusterings.index))
     by_settings = recon.subset_clusterings(lambda x: x["a"] < 2)
     assert (len(recon.settings) / 2) == len(by_settings.settings)
     assert (recon.clusterings.shape[1] / 2) == by_settings.clusterings.shape[1]
     assert all(by_settings._mapping.index.get_level_values("clustering").unique() == by_settings.settings.index)
     assert all(by_settings.cluster_ids == np.unique(by_settings.clusterings.stack()))
+
+
+def test_naming(clustering_run: Tuple[pd.DataFrame, pd.DataFrame]):
+    s, c = clustering_run
+    r = reconcile(s, c)
+    cs = r.get_components(0.9)
+    # Now for subset
+    subset = np.sort(np.random.choice(len(c), 75, replace=False))
+    c_sub = c.iloc[subset, :]
+    r_sub = reconcile(s, c_sub)
+    # cs_sub = r_sub.get_components(0.9)
+    in_comp = r_sub.clusterings.iloc[-1, 0]
+    comp_from_subset = r_sub.find_components(0.9, [in_comp])[0]
+    assert all(np.isin(comp_from_subset.intersect_names, cs[0].intersect_names))
 
 
 def test_component_neighbors(clustering_run):

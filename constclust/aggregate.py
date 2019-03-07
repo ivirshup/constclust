@@ -33,7 +33,7 @@ class Component(object):
         Subset of parents settings. Contains only settings for clustering
         which appear in this component.
     cluster_ids : `np.array`
-        Which clusters are in this component
+        Which clusters are in this component.
     intersect : np.array
         Intersect of clusters in this component.
     union : np.array
@@ -50,6 +50,14 @@ class Component(object):
         # TODO: I could just figure out how big these are, and make their contents lazily evaluated. I think this would be a pretty big speed up for interactive work.
         self.intersect = reduce(partial(np.intersect1d, assume_unique=True), cells)
         self.union = reduce(np.union1d, cells)
+
+    @property
+    def intersect_names(self):
+        return self._parent._obs_names[self.intersect].values
+
+    @property
+    def union_names(self):
+        return self._parent._obs_names[self.union].values
 
     def one_hot(self, selection="intersect"):
         encoding = np.zeros(self._parent.clusterings.shape[0], dtype=bool)
