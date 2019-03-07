@@ -56,9 +56,9 @@ def main():
                 n_procs=args.n_procs,
             )
             r = reconcile(settings, clusterings, nprocs=args.n_procs)
-            settings.to_pickle(outdir / f"{frac}_{seed}_settings.pkl.zip")
-            clusterings.to_pickle(outdir / f"{frac}_{seed}_clusterings.pkl.zip")
-            pd.to_pickle(r, outdir / f"{frac}_{seed}_recon.pkl.zip")
+            settings.to_pickle(outdir / f"{frac:g}_{seed}_settings.pkl.zip")
+            clusterings.to_pickle(outdir / f"{frac:g}_{seed}_clusterings.pkl.zip")
+            pd.to_pickle(r, outdir / f"{frac:g}_{seed}_recon.pkl.zip")
 
 
 if __name__ == "__main__":
