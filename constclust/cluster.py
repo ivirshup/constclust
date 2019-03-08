@@ -12,7 +12,14 @@ from multiprocessing import Pool
 # TODO: Is random_state being passed to the right thing?
 
 
-def cluster(adata, n_neighbors, resolutions, random_state, n_procs=1):
+def cluster(
+    adata,
+    n_neighbors,
+    resolutions,
+    random_state,
+    n_procs=1,
+    partition_type=leidenalg.RBConfigurationVertexPartition,
+):
     """
     Parameters
     ----------
@@ -30,7 +37,7 @@ def cluster(adata, n_neighbors, resolutions, random_state, n_procs=1):
     Returns
     -------
     Tuple[pd.DataFrame, pd.DataFrame]
-        Pair of dataframes, where the first contains the settings for each 
+        Pair of dataframes, where the first contains the settings for each
         partitioning, and the second contains the partitionings.
     """
     n_neighbors = sorted(n_neighbors)
@@ -41,31 +48,36 @@ def cluster(adata, n_neighbors, resolutions, random_state, n_procs=1):
         # Neighbor finding is already multithreaded
         sc.pp.neighbors(adata, n_neighbors=n, random_state=seed)
         g = sc.utils.get_igraph_from_adjacency(
-            adata.uns['neighbors']['connectivities'], directed=True)
-        neighbor_graphs.append(
-            {"n_neighbors": n, "random_state": seed, "graph": g})
+            adata.uns["neighbors"]["connectivities"], directed=True
+        )
+        neighbor_graphs.append({"n_neighbors": n, "random_state": seed, "graph": g})
     cluster_jobs = []
     for graph, res in product(neighbor_graphs, resolutions):
         job = graph.copy()
-        job["resolution"] = res
+        job.update({"resolution": res, "partition_type": partition_type})
         cluster_jobs.append(job)
     with Pool(n_procs) as p:
         solutions = p.map(_cluster_single, cluster_jobs)
     clusters = pd.DataFrame(index=adata.obs_names)
     for i, clustering in enumerate(solutions):
         clusters[i] = clustering
-    settings_iter = ((job["n_neighbors"], job["resolution"], job["random_state"]) for job in cluster_jobs)
+    settings_iter = (
+        (job["n_neighbors"], job["resolution"], job["random_state"])
+        for job in cluster_jobs
+    )
     settings = pd.DataFrame.from_records(
         settings_iter,
         columns=["n_neighbors", "resolution", "random_state"],
-        index=range(len(solutions))
+        index=range(len(solutions)),
     )
     return settings, clusters
 
 
 def _cluster_single(argdict):
-    part = leidenalg.find_partition(argdict["graph"],
-                                    resolution_parameter=argdict["resolution"],
-                                    partition_type=leidenalg.RBConfigurationVertexPartition,
-                                    weights="weight")
+    part = leidenalg.find_partition(
+        argdict["graph"],
+        resolution_parameter=argdict["resolution"],
+        partition_type=argdict["partition_type"],
+        weights="weight",
+    )
     return np.array(part.membership)
