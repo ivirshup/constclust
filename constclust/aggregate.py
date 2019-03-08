@@ -132,6 +132,13 @@ class ReconcilerBase(object):
 
     Has methods for subsetting implemented, providing data is up to subclass.
     """
+    def __repr__(self):
+        kls = self.__class__.__name__
+        n_cells = len(self.clusterings)
+        n_clusterings, n_params = self.settings.shape
+        n_clusters = len(self._mapping)
+        return f"<{kls} {n_clusterings} clusterings, {n_clusters} clusters, {n_cells} cells>"
+
     @property
     def cluster_ids(self):
         return self._mapping.index.get_level_values("cluster")
@@ -292,6 +299,7 @@ class Reconciler(ReconcilerBase):
         self._mapping = mapping
         self.graph = graph
 
+    # TODO: Allow passing function for clusters
     def find_components(self, min_weight, clusters, min_cells=2):
         """
         Return components from filtered graph which contain specified clusters.
