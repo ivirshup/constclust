@@ -15,7 +15,7 @@ def main():
     from argparse import ArgumentParser
 
     parser = ArgumentParser(
-        description="This script subsamples and clusters an AnnData object multiple times for cross validation purposes."
+        description="This script clusters and reconciles an AnnData object."
     )
     parser.add_argument(
         "adata",

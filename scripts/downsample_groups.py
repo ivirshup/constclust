@@ -61,6 +61,7 @@ def main():
         settings.to_pickle(outdir / f"{val}_{frac:g}_{seed}_settings.pkl.zip")
         clusterings.to_pickle(outdir / f"{val}_{frac:g}_{seed}_clusterings.pkl.zip")
         pd.to_pickle(r, outdir / f"{val}_{frac:g}_{seed}_recon.pkl.zip")
+        run += 1
 
 
 def gen_subsamples(adata, field, fracs, n_reps):
