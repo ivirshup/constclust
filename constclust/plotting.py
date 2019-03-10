@@ -3,6 +3,7 @@ import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scanpy as sc
+from anndata import AnnData
 import pandas as pd
 from pandas.api.types import is_float_dtype, is_numeric_dtype, is_categorical_dtype
 import numpy as np
@@ -138,13 +139,32 @@ def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=s
     cb.outline.set_visible(False)
 
 
-def plot_component(component,
-                   adata,
-                   x="n_neighbors",
-                   y="resolution",
-                   plot_global=False,
-                   aspect=None,
-                   umap_kwargs={}):
+def component(component: Component,
+              adata: AnnData,
+              x: str = "n_neighbors",
+              y: str = "resolution",
+              plot_global: bool = False,
+              aspect: float = None,
+              umap_kwargs: dict = {}
+):
+    """
+    Plot stability and UMAP for component.
+
+    Params
+    ------
+    component:
+        Component object to plot.
+    adata:
+        AnnData to use for plotting UMAP. Should have same cell names as `component`s parent `Reconciler`.
+    x:
+        Parameter to plot on the X-axis.
+    y:
+        Parameter to plot on the Y-axis.
+    aspect:
+        Aspect ratio of entire plot. Defaults to 1/2.
+    umap_kwargs:
+        Arguments passed to `sc.pl.umap`.
+    """
     if aspect is None:
         if plot_global:
             aspect = 1/3
