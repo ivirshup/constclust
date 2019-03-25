@@ -239,16 +239,33 @@ class ReconcilerSubset(ReconcilerBase):
         self._mapping = mapping
         self.graph = graph
 
+    def find_contained_components(self, min_presence: float, min_weight=0.9, min_cells=2):
+        """
+        Find components contained in a subset.
+        """
+        m1 = self._mapping
+        m2 = self._parent._mapping
+        presence = m1.apply(len) / m2.loc[m1.index].apply(len)
+        clusters = np.array(presence.index.get_level_values("cluster")[presence > min_presence])
+        return self.find_components(min_weight, clusters, min_cells)
+
     def find_components(self, min_weight, clusters, min_cells=2):
         # This is actually a very slow check. Maybe I should wait on it?
         # TODO: I've modified the code, check speed and consider if this is really what I want.
         # if not np.isin(clusters, self._mapping.get_level_values("cluster")).all():
         #     raise ValueError("")
-        return self._parent.find_components(min_weight, clusters, min_cells=2)
+        return self._parent.find_components(min_weight, clusters, min_cells=min_cells)
 
     def get_components(self, min_weight, min_cells=2):
         """
-        Return connected components of graph, with edges filtered by min_weight
+        Return connected components of graph, with edges filtered by min_weight.
+
+        Parameters
+        ----------
+        min_weight: float
+            Minimum edge weight for inclusion of a clustering.
+        min_cells:
+            Minimum cells a component should have.
         """
         clusters = self._mapping.index.get_level_values("cluster")
         return self._parent.find_components(min_weight, clusters, min_cells)
@@ -280,12 +297,11 @@ class Reconciler(ReconcilerBase):
         Ordered set for names of the cells. Internally they are refered to by
         integer positions.
     _mapping : pd.Series
-        `pd.Series` with a `MultiIndex`. Index has levels `clustering` and `cluster`. 
+        `pd.Series` with a `MultiIndex`. Index has levels `clustering` and `cluster`.
         Each position in index should have a unique value at level "cluster", which
-        corresponds to a cluster in the clustering dataframe. Values are np.arrays 
+        corresponds to a cluster in the clustering dataframe. Values are `np.arrays`
         with indices of cells in relevant cluster. This should be considered immutable,
         though this is not the case for `ReconcilerSubset`s.
-        Series with MultiIndex with levels clustering and cluster id to that clusters contents.
     """
 
     def __init__(self, settings, clusterings, mapping, graph):
