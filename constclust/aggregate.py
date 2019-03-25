@@ -50,6 +50,7 @@ class Component(object):
         # TODO: I could just figure out how big these are, and make their contents lazily evaluated. I think this would be a pretty big speed up for interactive work.
         self.intersect = reduce(partial(np.intersect1d, assume_unique=True), cells)
         self.union = reduce(np.union1d, cells)
+        # self._value_counts = None
 
     @property
     def intersect_names(self):
@@ -58,6 +59,21 @@ class Component(object):
     @property
     def union_names(self):
         return self._parent._obs_names[self.union].values
+
+    # @property
+    # def cell_frequency(self):
+    #     return self.value_counts() / len(self.settings)
+
+    # def value_counts(self):
+    #     if self._value_counts is None:
+    #         cell_ids, counts = pd.value_counts(
+    #             self._parent._mapping.iloc[self.cluster_ids].values,
+    #             sort=False
+    #         )
+    #         self._value_counts = pd.Series(data=counts, values=cell_ids)
+    #     value_counts = self._value_counts.copy()
+    #     value_counts.index = self.union_names  # Is this slow?
+    #     return value_counts
 
     def one_hot(self, selection="intersect"):
         encoding = np.zeros(self._parent.clusterings.shape[0], dtype=bool)
@@ -85,10 +101,14 @@ def reconcile(settings, clusterings, nprocs=1):
     """
     Constructor for reconciler object.
 
-    Args:
-        settings (`pd.DataFrame`)
-        clusterings (`pd.DataFrame`)
-        nprocs (`int`)
+    Parameters
+    ----------
+    settings : pd.DataFrame
+        Parameterizations of each clustering.
+    clusterings : pd.DataFrame
+        Assignments from each clustering.
+    nprocs : int
+        Number of processes to use
     """
     assert all(
         settings.index == clusterings.columns
@@ -105,6 +125,7 @@ def reconcile(settings, clusterings, nprocs=1):
     mapping = gen_mapping(clusterings)
 
     # TODO: cleanup, this is for transition from networkx to igraph
+    # TODO: This can just get deleted, right?
     # Fix mapping
     frame = mapping.index.to_frame()
     mapping.index = pd.MultiIndex.from_arrays(
@@ -152,6 +173,10 @@ class ReconcilerBase(object):
         ----------
         clusters : Union[Collection[ClusterRef], Collection[Int]]
             If its a collection of ints, I'll say that was a range of parameter ids.
+        
+        Returns
+        -------
+        ReconcilerSubset
         """
         idx = []
         for c in clusters:
@@ -167,9 +192,15 @@ class ReconcilerBase(object):
 
         Reduces size of both `.settings` and `.clusterings`
 
-        Args:
-            clusterings_to_keep: Indexer into `Reconciler.settings`. Anything that should
-                give the correct result for `reconciler.settings.loc[clusterings_to_keep]`.
+        Parameters
+        ----------
+        clusterings_to_keep :
+            Indexer into `Reconciler.settings`. Anything that should give the correct
+            result for `reconciler.settings.loc[clusterings_to_keep]`.
+
+        Returns
+        -------
+        ReconcilerSubset
         """
         clusterings_to_keep = self.settings.loc[clusterings_to_keep].index.values
         new_settings = self.settings.loc[clusterings_to_keep]  # Should these be copies?
@@ -183,9 +214,11 @@ class ReconcilerBase(object):
         """
         Take subset of Reconciler, where only `cells_to_keep` are present
 
-        Args:
-            cells_to_keep: Indexer into `Reconciler.clusterings`. Anything that should
-                give the correct result for `reconciler.clusterings.loc[cells_to_keep]`.
+        Parameters
+        ----------
+        cells_to_keep :
+            Indexer into `Reconciler.clusterings`. Anything that should give the correct
+            result for `reconciler.clusterings.loc[cells_to_keep]`.
         """
         intmap = reverse_series_map(self._obs_names)
         cells_to_keep = intmap[self.clusterings.loc[cells_to_keep].index.values]
@@ -204,7 +237,7 @@ class ReconcilerBase(object):
 
 class ReconcilerSubset(ReconcilerBase):
     """
-    Subset of a reconciler
+    Subset of a Reconciler
 
     Attributes
     ----------

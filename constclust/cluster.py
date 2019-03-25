@@ -23,6 +23,8 @@ def cluster(
     leiden_kwargs={}
 ):
     """
+    Generate clusterings for each combination of ``n_neighbors``, ``resolutions``, and ``random_state``.
+
     Parameters
     ----------
     adata : AnnData
@@ -48,6 +50,7 @@ def cluster(
         Pair of dataframes, where the first contains the settings for each
         partitioning, and the second contains the partitionings.
     """
+    # Argument handling
     leiden_kwargs = leiden_kwargs.copy()
     neighbor_kwargs = neighbor_kwargs.copy()
 
@@ -67,6 +70,8 @@ def cluster(
     n_neighbors = sorted(n_neighbors)
     resolutions = sorted(resolutions)
     random_state = sorted(random_state)
+
+    # Logic
     neighbor_graphs = []
     for n, seed in product(n_neighbors, random_state):
         # Neighbor finding is already multithreaded (sorta)
