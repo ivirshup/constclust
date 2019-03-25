@@ -74,6 +74,18 @@ def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
     return ax
 
 
+def umap_cells(cells, adata, ax=None, umap_kwargs={}):
+    if hasattr(cells, "keys") and hasattr(cells, "values"):
+        cells = pd.Series(cells)
+    else:
+        cells = pd.Series(1, index=cells)
+    cell_values = pd.Series(0, index=adata.obs_names, dtype=float)
+    cell_values[cells.index] += cells
+    adata.obs["_tmp"] = cell_values
+    sc.pl.umap(adata, color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
+    adata.obs.drop(columns="_tmp", inplace=True)
+
+
 def umap(component, adata, ax=None, umap_kwargs={}):
     # TODO: Views should have parents, which is where I should get my obs names
     cell_names = component._parent._obs_names
