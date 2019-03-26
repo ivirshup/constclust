@@ -1,9 +1,12 @@
 from pathlib import Path
 from setuptools import setup
+import versioneer
 
 setup(
     name="constclust",
-    version="0.1.0",
+    # version="0.1.0",
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     url="https://github.com/ivirshup/ConsistentClusters",
     author="Isaac Virshup",
     author_email="ivirshup@gmail.com",
