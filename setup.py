@@ -4,7 +4,6 @@ import versioneer
 
 setup(
     name="constclust",
-    # version="0.1.0",
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
     url="https://github.com/ivirshup/ConsistentClusters",
@@ -17,7 +16,9 @@ setup(
     ],
     extras_require={
         "dev": [
-            "pytest"
+            "pytest",
+            "scanpydoc",
+            "sphinx"
         ]
     },
     packages=["constclust"],

@@ -2,6 +2,7 @@ from .paramspace import gen_neighbors
 from .utils import reverse_series_map, pairs_to_dict
 from datetime import datetime
 
+from typing import List
 import igraph
 import numba
 import numpy as np
@@ -97,56 +98,6 @@ class Component(object):
         )
 
 
-def reconcile(settings, clusterings, nprocs=1):
-    """
-    Constructor for reconciler object.
-
-    Parameters
-    ----------
-    settings : pd.DataFrame
-        Parameterizations of each clustering.
-    clusterings : pd.DataFrame
-        Assignments from each clustering.
-    nprocs : int
-        Number of processes to use
-    """
-    assert all(
-        settings.index == clusterings.columns
-    )  # I should probably save these, right?
-    # Check clusterings:
-    clust_dtypes = clusterings.dtypes
-    if not all(map(is_integer_dtype, clust_dtypes)):
-        wrong_types = {t for t in clust_dtypes if not is_integer_dtype(t)}
-        raise TypeError(
-            "Contents of `clusterings` must be integers dtypes. Found:"
-            " {}".format(wrong_types)
-        )
-    clusterings = clusterings.copy()  # This gets mutated
-    mapping = gen_mapping(clusterings)
-
-    # TODO: cleanup, this is for transition from networkx to igraph
-    # TODO: This can just get deleted, right?
-    # Fix mapping
-    frame = mapping.index.to_frame()
-    mapping.index = pd.MultiIndex.from_arrays(
-        (frame["clustering"].values, np.arange(frame.shape[0])),
-        names=("clustering", "cluster"),
-    )
-    # Set cluster names to be unique
-    cvals = clusterings.values
-    cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
-    assert all(np.unique(cvals) == mapping.index.levels[1])
-
-    edges = build_graph(settings, clusterings, mapping=mapping, nprocs=nprocs)
-    graph = igraph.Graph(
-        n=len(mapping),
-        edges=list(((i, j) for i, j, k in edges)),
-        vertex_attrs={"cluster_id": np.arange(len(mapping))},
-        edge_attrs={"weight": list(k for i, j, k in edges)},
-    )
-    return Reconciler(settings, clusterings, mapping, graph)
-
-
 class ReconcilerBase(object):
     """
     Base type for reconciler.
@@ -171,12 +122,8 @@ class ReconcilerBase(object):
 
         Parameters
         ----------
-        clusters : Union[Collection[ClusterRef], Collection[Int]]
+        clusters : Collection[Int]
             If its a collection of ints, I'll say that was a range of parameter ids.
-        
-        Returns
-        -------
-        ReconcilerSubset
         """
         idx = []
         for c in clusters:
@@ -200,7 +147,7 @@ class ReconcilerBase(object):
 
         Returns
         -------
-        ReconcilerSubset
+        ``ReconcilerSubset``
         """
         clusterings_to_keep = self.settings.loc[clusterings_to_keep].index.values
         new_settings = self.settings.loc[clusterings_to_keep]  # Should these be copies?
@@ -217,8 +164,12 @@ class ReconcilerBase(object):
         Parameters
         ----------
         cells_to_keep :
-            Indexer into `Reconciler.clusterings`. Anything that should give the correct
+            Indexer into ``Reconciler.clusterings``. Anything that should give the correct
             result for `reconciler.clusterings.loc[cells_to_keep]`.
+
+        Returns
+        -------
+        ``ReconcilerSubset``
         """
         intmap = reverse_series_map(self._obs_names)
         cells_to_keep = intmap[self.clusterings.loc[cells_to_keep].index.values]
@@ -241,22 +192,22 @@ class ReconcilerSubset(ReconcilerBase):
 
     Attributes
     ----------
-    _parent: `Reconciler`
+    _parent: ``Reconciler``
         `Reconciler` this subset was derived from.
-    settings: `pd.DataFrame`
+    settings: ``pd.DataFrame``
         Settings for clusterings in this subset.
-    clusterings: `pd.DataFrame`
+    clusterings: ``pd.DataFrame``
         Clusterings contained in this subset.
-    graph: `igraph.Graph`
+    graph: ``igraph.Graph``
         Reference to graph from parent.
-    cluster_ids: `np.array[int]`
+    cluster_ids: ``np.array[int]``
         Integer ids of all clusters in this subset.
-    _mapping: `pd.Series`
+    _mapping: ``pd.Series``
         `pd.Series` with `MultiIndex`. Unlike the `_mapping` from `Reconciler`, this
         does not neccesarily have all clusters, so ranges of clusters cannot be assumed
         to be contiguous. Additionally, you can't just index into this with cluster_ids
         as positions.
-    _obs_names: `pd.Series`
+    _obs_names: ``pd.Series``
         Maps from integer position to input cell name.
     """
 
@@ -295,9 +246,9 @@ class ReconcilerSubset(ReconcilerBase):
 
         Parameters
         ----------
-        min_weight: float
+        min_weight : ``float``
             Minimum edge weight for inclusion of a clustering.
-        min_cells:
+        min_cells : ``int``
             Minimum cells a component should have.
         """
         clusters = self._mapping.index.get_level_values("cluster")
@@ -311,30 +262,31 @@ class Reconciler(ReconcilerBase):
 
     Attributes
     ----------
-    settings : pd.DataFrame
+    settings : ``pd.DataFrame``
         Contains settings for all clusterings. Index corresponds to
         `.clusterings` columns, while columns should correspond to the
         parameters which were varied.
-    clusterings : pd.DataFrame
+    clusterings : ``pd.DataFrame``
         Contains cluster assignments for each cell, for each clustering.
         Columns correspond to `.settings` index, while the index correspond
         to the cells. Each cluster is encoded with a unique cluster id.
-    graph : igraph.Graph
+    graph : ``igraph.Graph``
         Weighted graph. Nodes are clusters (identified by unique cluster id
         integer, same as in `.clusterings`). Edges connect clusters with shared
         contents. Weight is the Jaccard similarity between the contents of the
         clusters.
-    cluster_ids: `np.array[int]`
+    cluster_ids : ``np.array[int]``
         Integer ids of all clusters in this Reconciler.
-    _obs_names : pd.Index
+    _obs_names : ``pd.Index``
         Ordered set for names of the cells. Internally they are refered to by
         integer positions.
-    _mapping : pd.Series
+    _mapping : ``pd.Series``
         `pd.Series` with a `MultiIndex`. Index has levels `clustering` and `cluster`.
         Each position in index should have a unique value at level "cluster", which
         corresponds to a cluster in the clustering dataframe. Values are `np.arrays`
         with indices of cells in relevant cluster. This should be considered immutable,
         though this is not the case for `ReconcilerSubset`s.
+
     """
 
     def __init__(self, settings, clusterings, mapping, graph):
@@ -353,11 +305,12 @@ class Reconciler(ReconcilerBase):
         """
         Return components from filtered graph which contain specified clusters.
 
-        Args:
-            min_weight (float):
-                Minimum weight for edges to be kept in graph. Should be over 0.5.
-            clusters (np.array[int]):
-                Clusters which you'd like to search from.
+        Parameters
+        ----------
+        min_weight : ``float``
+            Minimum weight for edges to be kept in graph. Should be over 0.5.
+        clusters : ``np.array[int]``
+            Clusters which you'd like to search from.
         """
         # Subset graph
         over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
@@ -425,6 +378,58 @@ class Reconciler(ReconcilerBase):
             comps.append(comp)
         comps.sort(key=lambda x: (len(x.settings), len(x.intersect)), reverse=True)
         return comps
+
+
+def reconcile(
+    settings: pd.DataFrame, clusterings: pd.DataFrame, nprocs: int = 1
+) -> Reconciler:
+    """
+    Constructor for reconciler object.
+
+    Parameters
+    ----------
+    settings
+        Parameterizations of each clustering.
+    clusterings
+        Assignments from each clustering.
+    nprocs
+        Number of processes to use
+    """
+    assert all(
+        settings.index == clusterings.columns
+    )  # I should probably save these, right?
+    # Check clusterings:
+    clust_dtypes = clusterings.dtypes
+    if not all(map(is_integer_dtype, clust_dtypes)):
+        wrong_types = {t for t in clust_dtypes if not is_integer_dtype(t)}
+        raise TypeError(
+            "Contents of `clusterings` must be integers dtypes. Found:"
+            " {}".format(wrong_types)
+        )
+    clusterings = clusterings.copy()  # This gets mutated
+    mapping = gen_mapping(clusterings)
+
+    # TODO: cleanup, this is for transition from networkx to igraph
+    # TODO: This can just get deleted, right?
+    # Fix mapping
+    frame = mapping.index.to_frame()
+    mapping.index = pd.MultiIndex.from_arrays(
+        (frame["clustering"].values, np.arange(frame.shape[0])),
+        names=("clustering", "cluster"),
+    )
+    # Set cluster names to be unique
+    cvals = clusterings.values
+    cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
+    assert all(np.unique(cvals) == mapping.index.levels[1])
+
+    edges = build_graph(settings, clusterings, mapping=mapping, nprocs=nprocs)
+    graph = igraph.Graph(
+        n=len(mapping),
+        edges=list(((i, j) for i, j, k in edges)),
+        vertex_attrs={"cluster_id": np.arange(len(mapping))},
+        edge_attrs={"weight": list(k for i, j, k in edges)},
+    )
+    return Reconciler(settings, clusterings, mapping, graph)
 
 
 def _prep_neighbors(neighbors, clusterings):

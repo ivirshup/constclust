@@ -4,6 +4,8 @@ This module contains the code to cluster a single cell experiment many times.
 
 from itertools import product
 import scanpy as sc
+from anndata import AnnData
+from typing import Collection, Tuple
 import numpy as np
 import pandas as pd
 import leidenalg
@@ -14,41 +16,41 @@ from functools import partial
 
 
 def cluster(
-    adata,
-    n_neighbors,
-    resolutions,
-    random_state,
-    n_procs=1,
-    neighbor_kwargs={},
-    leiden_kwargs={}
-):
+    adata: AnnData,
+    n_neighbors: Collection[int],
+    resolutions: Collection[float],
+    random_state: Collection[int],
+    n_procs: int = 1,
+    neighbor_kwargs: dict = {},
+    leiden_kwargs: dict = {},
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate clusterings for each combination of ``n_neighbors``, ``resolutions``, and ``random_state``.
 
     Parameters
     ----------
-    adata : AnnData
+    adata
         Object to be clustered.
-    n_neighbors : Sequence[Int]
+    n_neighbors
         What should the number of neighbors be?
-    resolutions : Sequence[Float]
+    resolutions
         Values for resolution for leiden algorithm
-    random_state : Sequence[Int]
+    random_state
         Random seeds to start with.
-    n_procs : Int
+    n_procs
         Number of processes to use.
-    neighbor_kwargs : dict, optional
+    neighbor_kwargs
         Key word arguments to pass to all calls to `sc.pp.neighbors`. For
         example: `{"use_rep": "X"}`.
-    leiden_kwargs : dict, optional
+    leiden_kwargs
         Key word argument to pass to all calls to `leidenalg.find_partition`.
         For example, `{"partition_type": leidenalg.CPMVertexPartition}`.
 
     Returns
     -------
-    Tuple[pd.DataFrame, pd.DataFrame]
-        Pair of dataframes, where the first contains the settings for each
-        partitioning, and the second contains the partitionings.
+
+    Pair of dataframes, where the first contains the settings for each partitioning,
+    and the second contains the partitionings.
     """
     # Argument handling
     leiden_kwargs = leiden_kwargs.copy()
@@ -62,10 +64,16 @@ def cluster(
     def _check_params(kwargs, vals, arg_name):
         for val in vals:
             if val in kwargs:
-                raise ValueError(f"You cannot pass value for key `{val}` in `{arg_name}`")
+                raise ValueError(
+                    f"You cannot pass value for key `{val}` in `{arg_name}`"
+                )
 
-    _check_params(neighbor_kwargs, ["adata", "n_neighbors", "random_state"], "neighbor_kwargs")
-    _check_params(leiden_kwargs, ["graph", "resolution_parameter", "resolution"], "leiden_kwargs")
+    _check_params(
+        neighbor_kwargs, ["adata", "n_neighbors", "random_state"], "neighbor_kwargs"
+    )
+    _check_params(
+        leiden_kwargs, ["graph", "resolution_parameter", "resolution"], "leiden_kwargs"
+    )
 
     n_neighbors = sorted(n_neighbors)
     resolutions = sorted(resolutions)
@@ -106,8 +114,6 @@ def cluster(
 
 def _cluster_single(argdict, leiden_kwargs):
     part = leidenalg.find_partition(
-        argdict["graph"],
-        resolution_parameter=argdict["resolution"],
-        **leiden_kwargs
+        argdict["graph"], resolution_parameter=argdict["resolution"], **leiden_kwargs
     )
     return np.array(part.membership)
