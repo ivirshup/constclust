@@ -1,0 +1,2 @@
+include versioneer.py
+include constclust/_version.py
