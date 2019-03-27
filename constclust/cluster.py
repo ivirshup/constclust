@@ -32,19 +32,19 @@ def cluster(
     adata
         Object to be clustered.
     n_neighbors
-        What should the number of neighbors be?
+        Values for numbers of neighbors.
     resolutions
-        Values for resolution for leiden algorithm
+        Values for resolution parameter for modularity optimization.
     random_state
         Random seeds to start with.
     n_procs
         Number of processes to use.
     neighbor_kwargs
-        Key word arguments to pass to all calls to `sc.pp.neighbors`. For
+        Key word arguments to pass to all calls to ``sc.pp.neighbors``. For
         example: `{"use_rep": "X"}`.
     leiden_kwargs
-        Key word argument to pass to all calls to `leidenalg.find_partition`.
-        For example, `{"partition_type": leidenalg.CPMVertexPartition}`.
+        Key word argument to pass to all calls to ``leidenalg.find_partition``.
+        For example, ``{"partition_type": leidenalg.CPMVertexPartition}``.
 
     Returns
     -------

@@ -5,4 +5,4 @@ API
     :members:   cluster, reconcile
 
 .. automodule:: constclust.aggregate
-    :members:   ReconcilerBase, Reconciler, ReconcilerSubset
+    :members:   ReconcilerBase, Reconciler, ReconcilerSubset, Component

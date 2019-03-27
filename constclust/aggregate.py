@@ -1,8 +1,7 @@
 from .paramspace import gen_neighbors
 from .utils import reverse_series_map, pairs_to_dict
-from datetime import datetime
 
-from typing import List
+from typing import List, Collection
 import igraph
 import numba
 import numpy as np
@@ -29,16 +28,20 @@ class Component(object):
     Attributes
     ----------
     _parent : Reconciler
-        The Reconciler which generated this component.
-    settings : pd.DataFrame
+        The ``Reconciler`` which generated this component.
+    settings : pandas.DataFrame
         Subset of parents settings. Contains only settings for clustering
         which appear in this component.
-    cluster_ids : `np.array`
+    cluster_ids : numpy.ndarray
         Which clusters are in this component.
-    intersect : np.array
-        Intersect of clusters in this component.
-    union : np.array
-        Union of clusters in this component.
+    intersect : numpy.ndarray[int]
+        Intersection of samples in this component.
+    intersect_names : numpy.ndarray[str]
+        Names of samples in the intersection of this component.
+    union : numpy.ndarray[int]
+        Union of samples in this component.
+    union_names : numpy.ndarray[str]
+        Names of samples in the union of this component.
     """
 
     def __init__(self, reconciler, cluster_ids):
@@ -135,15 +138,15 @@ class ReconcilerBase(object):
 
     def subset_clusterings(self, clusterings_to_keep):
         """
-        Take subset of Reconciler, where only `clusterings_to_keep` are present.
+        Take subset of Reconciler, where only ``clusterings_to_keep`` are present.
 
-        Reduces size of both `.settings` and `.clusterings`
+        Reduces size of both ``.settings`` and ``.clusterings``.
 
         Parameters
         ----------
-        clusterings_to_keep :
-            Indexer into `Reconciler.settings`. Anything that should give the correct
-            result for `reconciler.settings.loc[clusterings_to_keep]`.
+        clusterings_to_keep
+            Indexer into ``Reconciler.settings``. Anything that should give the correct
+            result for ``reconciler.settings.loc[clusterings_to_keep]``.
 
         Returns
         -------
@@ -159,13 +162,13 @@ class ReconcilerBase(object):
 
     def subset_cells(self, cells_to_keep):
         """
-        Take subset of Reconciler, where only `cells_to_keep` are present
+        Take subset of Reconciler, where only ``cells_to_keep`` are present.
 
         Parameters
         ----------
         cells_to_keep :
             Indexer into ``Reconciler.clusterings``. Anything that should give the correct
-            result for `reconciler.clusterings.loc[cells_to_keep]`.
+            result for ``reconciler.clusterings.loc[cells_to_keep]``.
 
         Returns
         -------
@@ -192,21 +195,21 @@ class ReconcilerSubset(ReconcilerBase):
 
     Attributes
     ----------
-    _parent: ``Reconciler``
+    _parent: Reconciler
         `Reconciler` this subset was derived from.
-    settings: ``pd.DataFrame``
+    settings: pandas.DataFrame
         Settings for clusterings in this subset.
-    clusterings: ``pd.DataFrame``
+    clusterings: pandas.DataFrame
         Clusterings contained in this subset.
-    graph: ``igraph.Graph``
+    graph: igraph.Graph
         Reference to graph from parent.
-    cluster_ids: ``np.array[int]``
+    cluster_ids: np.ndarray[int]
         Integer ids of all clusters in this subset.
-    _mapping: ``pd.Series``
-        `pd.Series` with `MultiIndex`. Unlike the `_mapping` from `Reconciler`, this
-        does not neccesarily have all clusters, so ranges of clusters cannot be assumed
-        to be contiguous. Additionally, you can't just index into this with cluster_ids
-        as positions.
+    _mapping: pandas.Series
+        ``pd.Series`` with a ``MultiIndex``. Unlike the ``_mapping`` from ``Reconciler``,
+        this does not neccesarily have all clusters, so ranges of clusters cannot be 
+        assumed to be contiguous. Additionally, you can't just index into this with 
+        ``cluster_ids`` as positions.
     _obs_names: ``pd.Series``
         Maps from integer position to input cell name.
     """
@@ -223,7 +226,7 @@ class ReconcilerSubset(ReconcilerBase):
         self._mapping = mapping
         self.graph = graph
 
-    def find_contained_components(self, min_presence: float, min_weight=0.9, min_cells=2):
+    def find_contained_components(self, min_presence: float, min_weight: float = 0.9, min_cells: int = 2):
         """
         Find components contained in a subset.
         """
@@ -233,22 +236,22 @@ class ReconcilerSubset(ReconcilerBase):
         clusters = np.array(presence.index.get_level_values("cluster")[presence > min_presence])
         return self.find_components(min_weight, clusters, min_cells)
 
-    def find_components(self, min_weight, clusters, min_cells=2):
+    def find_components(self, min_weight, clusters, min_cells=2) -> List[Component]:
         # This is actually a very slow check. Maybe I should wait on it?
         # TODO: I've modified the code, check speed and consider if this is really what I want.
         # if not np.isin(clusters, self._mapping.get_level_values("cluster")).all():
         #     raise ValueError("")
         return self._parent.find_components(min_weight, clusters, min_cells=min_cells)
 
-    def get_components(self, min_weight, min_cells=2):
+    def get_components(self, min_weight: float, min_cells: int = 2) -> List[Component]:
         """
         Return connected components of graph, with edges filtered by min_weight.
 
         Parameters
         ----------
-        min_weight : ``float``
+        min_weight
             Minimum edge weight for inclusion of a clustering.
-        min_cells : ``int``
+        min_cells
             Minimum cells a component should have.
         """
         clusters = self._mapping.index.get_level_values("cluster")
@@ -262,34 +265,34 @@ class Reconciler(ReconcilerBase):
 
     Attributes
     ----------
-    settings : ``pd.DataFrame``
+    settings : pandas.DataFrame
         Contains settings for all clusterings. Index corresponds to
         `.clusterings` columns, while columns should correspond to the
         parameters which were varied.
-    clusterings : ``pd.DataFrame``
+    clusterings : pandas.DataFrame
         Contains cluster assignments for each cell, for each clustering.
         Columns correspond to `.settings` index, while the index correspond
         to the cells. Each cluster is encoded with a unique cluster id.
-    graph : ``igraph.Graph``
+    graph : igraph.Graph
         Weighted graph. Nodes are clusters (identified by unique cluster id
         integer, same as in `.clusterings`). Edges connect clusters with shared
         contents. Weight is the Jaccard similarity between the contents of the
         clusters.
-    cluster_ids : ``np.array[int]``
+    cluster_ids : numpy.ndarray[int]
         Integer ids of all clusters in this Reconciler.
-    _obs_names : ``pd.Index``
+    _obs_names : pandas.Index
         Ordered set for names of the cells. Internally they are refered to by
         integer positions.
-    _mapping : ``pd.Series``
-        `pd.Series` with a `MultiIndex`. Index has levels `clustering` and `cluster`.
-        Each position in index should have a unique value at level "cluster", which
-        corresponds to a cluster in the clustering dataframe. Values are `np.arrays`
-        with indices of cells in relevant cluster. This should be considered immutable,
-        though this is not the case for `ReconcilerSubset`s.
-
+    _mapping : pandas.Series
+        ``pd.Series`` with a ``MultiIndex``. Index has levels ``clustering``
+        and ``cluster``. Each position in index should have a unique value at
+        level "cluster", which corresponds to a cluster in the clustering 
+        dataframe. Values are ``np.arrays`` with indices of cells in relevant
+        cluster. This should be considered immutable, though this is not the
+        case for ``ReconcilerSubset``s.
     """
 
-    def __init__(self, settings, clusterings, mapping, graph):
+    def __init__(self, settings: pd.DataFrame, clusterings: pd.DataFrame, mapping: pd.Series, graph: igraph.Graph):
         assert all(settings.index == clusterings.columns)
         self._parent = self  # Kinda hacky, could maybe remove
         self.settings = settings
@@ -301,7 +304,9 @@ class Reconciler(ReconcilerBase):
         self.graph = graph
 
     # TODO: Allow passing function for clusters
-    def find_components(self, min_weight, clusters, min_cells=2):
+    def find_components(
+        self, min_weight: float, clusters: Collection[int], min_cells: int = 2
+    ) -> List[Component]:
         """
         Return components from filtered graph which contain specified clusters.
 
@@ -361,9 +366,21 @@ class Reconciler(ReconcilerBase):
             reverse=True,
         )
 
-    def get_components(self, min_weight, min_cells=2):
+    def get_components(self, min_weight: float, min_cells: int = 2):
         """
-        Return connected components of graph, with edges filtered by min_weight
+        Return connected components of graph, with edges filtered by ``min_weight``.
+
+        Parameters
+        ----------
+        min_weight
+            Minimum weight for edges to be kept in graph. Should be in range ``[0.5, 1]``.
+        min_cells
+            Minimum number of cells in a component.
+
+        Returns
+        -------
+        ``List[Component]``:
+           All components from ``Reconciler``, sorted by number of clusterings.
         """
         over_cutoff = np.where(np.array(self.graph.es["weight"]) >= min_weight)[0]
         # If vertices are deleted, indices (ids) change
@@ -512,11 +529,11 @@ def gen_mapping(clusterings):
 
     Parameters
     ----------
-    clusterings : pd.DataFrame
+    clusterings : pandas.DataFrame
 
     Returns
     -------
-    pd.Series
+    pandas.Series
         Mapping to cluster contents. Index is a MultiIndex with levels
         "clustering", "cluster". Values are np.arrays of cluster contents.
     """
