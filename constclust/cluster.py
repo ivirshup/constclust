@@ -15,7 +15,7 @@ import bbknn
 
 # TODO: Is random_state being passed to the right thing?
 
-
+# TODO: Refactor
 def cluster(
     adata: AnnData,
     n_neighbors: Collection[int],
@@ -211,7 +211,7 @@ def cluster_batch_bbknn(
     for i, clustering in enumerate(solutions):
         clusters[i] = clustering
     settings_iter = (
-        (job["n_neighbors"], job["resolution"], job["random_state"])
+        (job["neighbors_within_batch"], job["trim"], job["resolution"], job["random_state"])
         for job in cluster_jobs
     )
     settings = pd.DataFrame.from_records(

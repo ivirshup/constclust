@@ -398,7 +398,7 @@ class Reconciler(ReconcilerBase):
 
 
 def reconcile(
-    settings: pd.DataFrame, clusterings: pd.DataFrame, nprocs: int = 1
+    settings: pd.DataFrame, clusterings: pd.DataFrame, paramtypes="oou", nprocs: int = 1
 ) -> Reconciler:
     """
     Constructor for reconciler object.
@@ -439,7 +439,7 @@ def reconcile(
     cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
     assert all(np.unique(cvals) == mapping.index.levels[1])
 
-    edges = build_graph(settings, clusterings, mapping=mapping, nprocs=nprocs)
+    edges = build_graph(settings, clusterings, mapping=mapping, paramtypes=paramtypes, nprocs=nprocs)
     graph = igraph.Graph(
         n=len(mapping),
         edges=list(((i, j) for i, j, k in edges)),
@@ -492,12 +492,12 @@ def _get_edges(clustering1: np.array, clustering2: np.array):
     return edges
 
 
-def build_graph(settings, clusters, mapping=None, nprocs=1):
+def build_graph(settings, clusters, mapping=None, paramtypes="oou", nprocs=1):
     """
     Build a graph of overlapping clusters (for neighbors in parameter space).
     """
     graph = list()  # edge list
-    neighbors = gen_neighbors(settings, "oou")  # TODO: Pass ordering args
+    neighbors = gen_neighbors(settings, paramtypes)
     # if mapping is None:
     # mapping = gen_mapping(clusters)
     args = _prep_neighbors(neighbors, clusters)

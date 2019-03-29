@@ -6,7 +6,7 @@ del get_versions
 import sys
 from scanpy.utils import annotate_doc_types
 from .aggregate import reconcile, comp_stats
-from .cluster import cluster
+from .cluster import cluster, cluster_batch_bbknn
 
 annotate_doc_types(sys.modules[__name__], 'constclust')
 del annotate_doc_types
