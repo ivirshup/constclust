@@ -10,7 +10,8 @@ from pandas.api.types import (
     is_categorical_dtype,
     is_integer_dtype,
     is_bool_dtype,
-)  # is_numeric_dtype
+    is_numeric_dtype
+)
 from sklearn import metrics
 
 from functools import reduce, partial
@@ -188,6 +189,60 @@ class ReconcilerBase(object):
         )
         return new_rec
 
+    # TODO: Should these describe methods only work on full reconciler?
+    # Is it intuitive enough that the results will change when subset by cells?
+    def describe_clusters(self, log1p: bool = False) -> pd.DataFrame:
+        """
+        Describe the clusters in this Reconciler.
+
+        Params
+        ------
+        log1p
+            Whether to also return log transformed values for numeric cols.
+
+        Returns
+        -------
+
+        DataFrame containing some summary statistics on the clusters in this reconciler. 
+        Good for plotting.
+
+        Example
+        -------
+        >>> import hvplot.pandas
+        >>> clusters = reconciler.describe_clusters(log1p=True)
+        >>> clusters.hvplot.scatter("log1p_resolution", "log1p_n_obs", datashade=True, dynspread=True)
+        """
+        lens = pd.DataFrame(self._mapping.apply(len), columns=["n_obs"])
+        lens = pd.merge(lens, self.settings,
+                        left_on="clustering", right_index=True)
+        if log1p:
+            for k in lens.columns[lens.dtypes.apply(is_numeric_dtype)]:
+                lens[f"log1p_{k}"] = np.log1p(lens[k])
+        return lens
+
+    def describe_clusterings(self) -> pd.DataFrame:
+        """
+        Convenience function to generate summary statistics for clusterings in a reconciler.
+
+        Example
+        -------
+        >>> import seaborn as sns
+        >>> clusterings = reconciler.describe_clusterings()
+        >>> sns.jointplot(data=clusterings, x="resolution", y="max_n_obs")
+        """
+        # r = r._parent
+        m = self._mapping
+        cdf = pd.DataFrame(index=pd.Index(self.settings.index, name="clustering"))
+        cdf["n_clusters"] = m.index.get_level_values("clustering").value_counts(sort=False).sort_index()
+        ls = m.apply(len)
+        gb = ls.groupby(level="clustering")
+        cdf["min_n_obs"] = gb.min()
+        cdf["max_n_obs"] = gb.max()
+        cdf["mean_n_obs"] = gb.mean()
+        cdf["n_singletons"] = (ls == 1).groupby("clustering").sum()
+        cdf = cdf.join(self.settings)
+        return cdf
+
 
 class ReconcilerSubset(ReconcilerBase):
     """
@@ -207,8 +262,8 @@ class ReconcilerSubset(ReconcilerBase):
         Integer ids of all clusters in this subset.
     _mapping: pandas.Series
         ``pd.Series`` with a ``MultiIndex``. Unlike the ``_mapping`` from ``Reconciler``,
-        this does not neccesarily have all clusters, so ranges of clusters cannot be 
-        assumed to be contiguous. Additionally, you can't just index into this with 
+        this does not necessarily have all clusters, so ranges of clusters cannot be
+        assumed to be contiguous. Additionally, you can't just index into this with
         ``cluster_ids`` as positions.
     _obs_names: ``pd.Series``
         Maps from integer position to input cell name.
