@@ -6,10 +6,17 @@ Requirements
 
 ``constclust`` requires Python v3.6+
 
+Installing with pip
+-------------------
+
+To install the most recent release with ``pip``::
+
+    pip3 install constclust
+
 Installing from source
 ----------------------
 
-Currently, ``constclust`` can be installed from source with ``pip``. To install::
+To install the development version from source::
 
     git clone https://github.com/ivirshup/constclust.git
     pip3 install ./constclust
