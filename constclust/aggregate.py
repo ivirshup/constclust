@@ -466,6 +466,11 @@ def reconcile(
         Assignments from each clustering.
     nprocs
         Number of processes to use
+
+    Example
+    -------
+    >>> params, clusterings = cluster(adata, ... )
+    >>> reconciler = reconcile(params, clusterings)
     """
     assert all(
         settings.index == clusterings.columns

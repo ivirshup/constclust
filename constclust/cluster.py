@@ -51,6 +51,16 @@ def cluster(
 
     Pair of dataframes, where the first contains the settings for each partitioning,
     and the second contains the partitionings.
+
+    Example
+    -------
+    >>> params, clusterings = cluster(
+            adata,
+            n_neighbors= np.linspace(15, 90, 4, dtype=int),
+            resolution=np.geomspace(0.5, 20, 50),
+            random_state=[0,1,2,3],
+            n_procs=4
+        )
     """
     # Argument handling
     leiden_kwargs = leiden_kwargs.copy()
