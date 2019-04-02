@@ -483,10 +483,9 @@ def reconcile(
             "Contents of `clusterings` must be integers dtypes. Found:"
             " {}".format(wrong_types)
         )
-    clusterings = clusterings.copy()  # This gets mutated
-
     # Set cluster names to be unique
     # Rank data to be sure values are consecutive integers per cluster
+    # clusterings = clusterings.copy()  # clusterings gets mutated, but the following line makes a copy anyways
     clusterings = clusterings.rank(axis=0, method="dense").astype(int) - 1
     cvals = clusterings.values
     cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
