@@ -484,21 +484,15 @@ def reconcile(
             " {}".format(wrong_types)
         )
     clusterings = clusterings.copy()  # This gets mutated
-    mapping = gen_mapping(clusterings)
 
-    # TODO: cleanup, this is for transition from networkx to igraph
-    # TODO: This can just get deleted, right?
-    # Fix mapping
-    frame = mapping.index.to_frame()
-    mapping.index = pd.MultiIndex.from_arrays(
-        (frame["clustering"].values, np.arange(frame.shape[0])),
-        names=("clustering", "cluster"),
-    )
     # Set cluster names to be unique
     # Rank data to be sure values are consecutive integers per cluster
     clusterings = clusterings.rank(axis=0, method="dense").astype(int) - 1
     cvals = clusterings.values
     cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
+
+    mapping = gen_mapping(clusterings)
+
     assert all(np.unique(cvals) == mapping.index.levels[1])
 
     edges = build_graph(settings, clusterings, mapping=mapping, nprocs=nprocs)
