@@ -495,6 +495,8 @@ def reconcile(
         names=("clustering", "cluster"),
     )
     # Set cluster names to be unique
+    # Rank data to be sure values are consecutive integers per cluster
+    clusterings = clusterings.rank(axis=0, method="dense").astype(int) - 1
     cvals = clusterings.values
     cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
     assert all(np.unique(cvals) == mapping.index.levels[1])
