@@ -9,6 +9,7 @@ from pandas.api.types import is_float_dtype, is_numeric_dtype, is_categorical_dt
 import numpy as np
 from .aggregate import Component
 from itertools import product
+from typing import Optional
 
 # TODO: Make it possible to have plot objects returned
 # TODO: Think up visualization for the set of components
@@ -27,9 +28,30 @@ def _fix_seaborn_float_labels(axis):
 
 # TODO: Add title arg
 # TODO: crosstab instead of pivot_table?
-def component_param_range(component, x="n_neighbors", y="resolution", ax=None):
+def component_param_range(
+    component: Component,
+    x: str = "n_neighbors",
+    y: str = "resolution",
+    ax: Optional[mpl.axis.Axis] = None
+) -> mpl.axis.Axis:
     """
     Given a component, show which parameters it's found at as a heatmap.
+
+    Params
+    ------
+    component
+        The component to plot.
+    x
+        The parameter for the x axis.
+    y
+        The parameter to place on the y axis.
+    ax
+        Optional axis to plot on.
+
+    Example
+    -------
+    >>> comps = reconciler.get_comps(0.9)
+    >>> plotting.component_param_range(comps[0])
     """
     # Calculate colorbar
     param_states = pd.Series(component._parent.settings[[x, y]].itertuples(index=False))
@@ -92,6 +114,8 @@ def umap(component, adata, ax=None, umap_kwargs={}):
     # if not all(cell_names.isin(adata.obs_names)):
         # raise ValueError("Counldn't find all cells in component's parent in adata.")
     cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
+    # present_freqs = component.cell_frequency
+    # cell_value[present_freqs.index] = present_freqs
     for cluster in component.cluster_ids:
         cell_value[component._parent._mapping.iloc[cluster]] += 1
     cell_value = cell_value / cell_value.max()
@@ -164,17 +188,17 @@ def component(component: Component,
 
     Params
     ------
-    component:
+    component
         Component object to plot.
-    adata:
+    adata
         AnnData to use for plotting UMAP. Should have same cell names as `component`s parent `Reconciler`.
-    x:
+    x
         Parameter to plot on the X-axis.
-    y:
+    y
         Parameter to plot on the Y-axis.
-    aspect:
+    aspect
         Aspect ratio of entire plot. Defaults to 1/2.
-    umap_kwargs:
+    umap_kwargs
         Arguments passed to `sc.pl.umap`.
     """
     if aspect is None:
