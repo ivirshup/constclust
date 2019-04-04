@@ -190,7 +190,7 @@ def cluster_batch_bbknn(
     )
 
     neighbors_within_batch = sorted(neighbors_within_batch)
-    trim = sorted(trim)
+    # trim = sorted(trim) #  TODO: value can be None
     resolutions = sorted(resolutions)
     random_state = sorted(random_state)
 

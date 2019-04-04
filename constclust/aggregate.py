@@ -625,7 +625,7 @@ def _gen_mapping(clusterings):
     return keys, values
 
 
-def comp_stats(comps):
+def comp_stats(comps, *, param_stats=False):
     stats = pd.DataFrame(
         {
             "n_clusts": [len(c) for c in comps],
@@ -633,6 +633,9 @@ def comp_stats(comps):
             "union": [len(c.union) for c in comps],
         }
     )
+    # TODO: Add some summary of param ranges
+    # if param_stats:
+        
     for col in stats:
         stats[f"log1p_{col}"] = np.log1p(stats[col])
     return stats
