@@ -518,7 +518,7 @@ def _call_get_edges(args):
 def _get_edges(clustering1: np.array, clustering2: np.array):
     edges = []
     offset1 = clustering1.min()
-    offset2 = clustering1.min()
+    offset2 = clustering2.min()
     # Because of how I've done unique node names, potentially this
     # could be done in a more generic way by creating a mapping here.
     offset_clusts1 = clustering1 - offset1
