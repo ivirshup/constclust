@@ -87,6 +87,7 @@ todo_include_todos = False
 
 intersphinx_mapping = dict(
     anndata=('https://anndata.readthedocs.io/en/latest/', None),
+    scanpy=("https://scanpy.readthedocs.io/en/stable/", None),
     bbknn=('https://bbknn.readthedocs.io/en/latest/', None),
     leidenalg=('https://leidenalg.readthedocs.io/en/latest/', None),
     matplotlib=('https://matplotlib.org/', None),

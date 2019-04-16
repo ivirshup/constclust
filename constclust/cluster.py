@@ -42,10 +42,10 @@ def cluster(
     n_procs
         Number of processes to use.
     neighbor_kwargs
-        Key word arguments to pass to all calls to ``sc.pp.neighbors``. For
-        example: `{"use_rep": "X"}`.
+        Key word arguments to pass to all calls to :func:`scanpy.pp.neighbors`.
+        For example: `{"use_rep": "X"}`.
     leiden_kwargs
-        Key word argument to pass to all calls to ``leidenalg.find_partition``.
+        Key word argument to pass to all calls to :func:`leidenalg.find_partition`.
         For example, ``{"partition_type": leidenalg.CPMVertexPartition}``.
     progress_bar
         Whether to diplay a progress bar for the clustering process.
