@@ -11,6 +11,7 @@ import pandas as pd
 import leidenalg
 from multiprocessing import Pool
 from functools import partial
+from tqdm import tqdm
 
 # TODO: Is random_state being passed to the right thing?
 
@@ -23,6 +24,7 @@ def cluster(
     n_procs: int = 1,
     neighbor_kwargs: dict = {},
     leiden_kwargs: dict = {},
+    progress_bar: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate clusterings for each combination of ``n_neighbors``, ``resolutions``, and ``random_state``.
@@ -45,6 +47,8 @@ def cluster(
     leiden_kwargs
         Key word argument to pass to all calls to ``leidenalg.find_partition``.
         For example, ``{"partition_type": leidenalg.CPMVertexPartition}``.
+    progress_bar
+        Whether to diplay a progress bar for the clustering process.
 
     Returns
     -------
@@ -57,7 +61,7 @@ def cluster(
     >>> params, clusterings = cluster(
             adata,
             n_neighbors=np.linspace(15, 90, 4, dtype=int),
-            resolutions=np.geomspace(0.5, 20, 50),
+            resolutions=np.geomspace(0.05, 20, 50),
             random_state=[0,1,2,3],
             n_procs=4
         )
@@ -91,7 +95,13 @@ def cluster(
 
     # Logic
     neighbor_graphs = []
-    for n, seed in product(n_neighbors, random_state):
+    n_iters = len(n_neighbors) * len(random_state)
+    for n, seed in tqdm(
+        product(n_neighbors, random_state),
+        desc="Building neighbor graphs",
+        total=n_iters,
+        disable=not progress_bar,
+    ):
         # Neighbor finding is already multithreaded (sorta)
         sc.pp.neighbors(adata, n_neighbors=n, random_state=seed, **neighbor_kwargs)
         g = sc.utils.get_igraph_from_adjacency(
@@ -106,7 +116,16 @@ def cluster(
     _cluster_single_kwargd = partial(_cluster_single, leiden_kwargs=leiden_kwargs)
     with Pool(n_procs) as p:
         # solutions = p.map(_cluster_single, cluster_jobs)
-        solutions = p.map(_cluster_single_kwargd, cluster_jobs)
+        # TODO: Make sure this is returning in the right order, also try chunking
+        solutions = []
+        for s in tqdm(
+            p.imap(_cluster_single_kwargd, cluster_jobs, chunksize=5),
+            desc="Finding communities",
+            total=len(cluster_jobs),
+            disable=not progress_bar,
+        ):
+            solutions.append(s)
+        # solutions = p.map(_cluster_single_kwargd, cluster_jobs)
     clusters = pd.DataFrame(index=adata.obs_names)
     for i, clustering in enumerate(solutions):
         clusters[i] = clustering
