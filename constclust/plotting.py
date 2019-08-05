@@ -110,6 +110,10 @@ def umap_cells(cells, adata, ax=None, umap_kwargs={}):
 
 def umap(component, adata, ax=None, umap_kwargs={}):
     # TODO: Views should have parents, which is where I should get my obs names
+    umap_kwargs = umap_kwargs.copy()
+    if "title" not in umap_kwargs:
+        umap_kwargs["title"] = "UMAP"
+
     cell_names = component._parent._obs_names
     # if not all(cell_names.isin(adata.obs_names)):
         # raise ValueError("Counldn't find all cells in component's parent in adata.")
@@ -122,9 +126,9 @@ def umap(component, adata, ax=None, umap_kwargs={}):
     adata.obs["_tmp"] = cell_value
     if (len(cell_names) < len(adata.obs_names)):
         # Take view
-        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
+        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, **umap_kwargs)
     else: 
-        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, title="UMAP", **umap_kwargs)
+        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, **umap_kwargs)
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
