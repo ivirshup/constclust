@@ -19,4 +19,5 @@ Installing from source
 To install the development version from source::
 
     git clone https://github.com/ivirshup/constclust.git
-    pip3 install ./constclust
+    cd constclust
+    pip3 install .

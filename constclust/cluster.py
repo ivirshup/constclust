@@ -12,10 +12,11 @@ import leidenalg
 from multiprocessing import Pool
 from functools import partial
 from tqdm import tqdm
+import bbknn
 
 # TODO: Is random_state being passed to the right thing?
 
-
+# TODO: Refactor
 def cluster(
     adata: AnnData,
     n_neighbors: Collection[int],
@@ -141,8 +142,117 @@ def cluster(
     return settings, clusters
 
 
+def cluster_batch_bbknn(
+    adata: AnnData,
+    batch_key: str,
+    neighbors_within_batch: Collection[int],
+    trim: Collection[int],
+    resolutions: Collection[float],
+    random_state: Collection[int],
+    n_procs: int = 1,
+    bbknn_kwargs: dict = {},
+    leiden_kwargs: dict = {},
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Generate clusterings for each combination of ``neighbors_within_batch``, ``trim``, ``resolutions``, and ``random_state``.
+
+    Parameters
+    ----------
+    adata
+        Object to be clustered.
+    batch_key
+        Key for ``adata.obs`` which encodes batch.
+    neighbors_within_batch
+        Values for numbers of neighbors within batch.
+    trim
+        Values for numbers of top connections to keep.
+    resolutions
+        Values for resolution parameter for modularity optimization.
+    random_state
+        Random seeds to start with.
+    n_procs
+        Number of processes to use.
+    bbknn_kwargs
+        Key word arguments to pass to all calls to ``sc.pp.neighbors``. For
+        example: `{"use_rep": "X"}`.
+    leiden_kwargs
+        Key word argument to pass to all calls to ``leidenalg.find_partition``.
+        For example, ``{"partition_type": leidenalg.CPMVertexPartition}``.
+
+    Returns
+    -------
+
+    Pair of dataframes, where the first contains the settings for each partitioning,
+    and the second contains the partitionings.
+    """
+    # Argument handling
+    leiden_kwargs = leiden_kwargs.copy()
+    bbknn_kwargs = bbknn_kwargs.copy()
+
+    if "partition_type" not in leiden_kwargs:
+        leiden_kwargs["partition_type"] = leidenalg.RBConfigurationVertexPartition
+    if "weights" not in leiden_kwargs:
+        leiden_kwargs["weights"] = "weight"
+
+    def _check_params(kwargs, vals, arg_name):
+        for val in vals:
+            if val in kwargs:
+                raise ValueError(
+                    f"You cannot pass value for key `{val}` in `{arg_name}`"
+                )
+
+    _check_params(
+        bbknn_kwargs, ["adata", "pca", "batch_list" "neighbors_within_batch", "trim"], "bbknn_kwargs"
+    )
+    _check_params(
+        leiden_kwargs, ["graph", "resolution_parameter", "resolution"], "leiden_kwargs"
+    )
+
+    neighbors_within_batch = sorted(neighbors_within_batch)
+    # trim = sorted(trim) #  TODO: value can be None
+    resolutions = sorted(resolutions)
+    random_state = sorted(random_state)
+
+    # Logic
+    neighbor_graphs = []
+    for n, t in product(neighbors_within_batch, trim):
+        # Neighbor finding is already multithreaded (sorta)
+        i, c = bbknn.bbknn_pca_matrix(
+            pca=adata.obsm["X_pca"],
+            batch_list=adata.obs[batch_key].values,
+            neighbors_within_batch=n,
+            trim=t,
+            **bbknn_kwargs
+        )
+        # sc.pp.neighbors(adata, n_neighbors=n, random_state=seed, **neighbor_kwargs)
+        g = sc.utils.get_igraph_from_adjacency(c, directed=True)
+        neighbor_graphs.append({"neighbors_within_batch": n, "trim": t, "graph": g})
+    cluster_jobs = []
+    for graph, res, seed in product(neighbor_graphs, resolutions, random_state):
+        job = graph.copy()
+        job.update({"resolution": res, "random_state": seed})
+        cluster_jobs.append(job)
+    _cluster_single_kwargd = partial(_cluster_single, leiden_kwargs=leiden_kwargs)
+    with Pool(n_procs) as p:
+        # solutions = p.map(_cluster_single, cluster_jobs)
+        solutions = p.map(_cluster_single_kwargd, cluster_jobs)
+    clusters = pd.DataFrame(index=adata.obs_names)
+    for i, clustering in enumerate(solutions):
+        clusters[i] = clustering
+    settings_iter = (
+        (job["neighbors_within_batch"], job["trim"], job["resolution"], job["random_state"])
+        for job in cluster_jobs
+    )
+    settings = pd.DataFrame.from_records(
+        settings_iter,
+        columns=["neighbors_within_batch", "trim", "resolution", "random_state"],
+        index=range(len(solutions)),
+    )
+    return settings, clusters
+
+
 def _cluster_single(argdict, leiden_kwargs):
     part = leidenalg.find_partition(
-        argdict["graph"], resolution_parameter=argdict["resolution"], **leiden_kwargs
+        argdict["graph"], resolution_parameter=argdict["resolution"], seed=argdict["random_state"], **leiden_kwargs
     )
     return np.array(part.membership)
