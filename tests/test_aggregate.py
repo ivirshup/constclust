@@ -79,3 +79,8 @@ def test_component_neighbors(clustering_run):
         subset_all_ns = set(filter(lambda x: (x[0] in comp_clusterings) and (x[1] in comp_clusterings), all_ns))
         subset_ns = set(gen_neighbors(c.settings, "oou"))
         assert subset_all_ns == subset_ns
+
+# TODO: Need a test case for this
+# def test_component_list_filter(clustering_run):
+#     recon = reconcile(*clustering_run)
+#     recon.get_components(0.9)

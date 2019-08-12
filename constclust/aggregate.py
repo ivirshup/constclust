@@ -1,8 +1,5 @@
-from .paramspace import gen_neighbors
-from .utils import reverse_series_map, pairs_to_dict
-
-from typing import List, Collection
 import igraph
+import networkx as nx
 import numba
 import numpy as np
 import pandas as pd
@@ -13,10 +10,17 @@ from pandas.api.types import (
     is_numeric_dtype
 )
 from sklearn import metrics
+import matplotlib.pyplot as plt
 
+from collections.abc import Collection, Callable, Iterable
 from functools import reduce, partial
-from itertools import chain
+from itertools import chain, combinations
 from multiprocessing import Pool
+from typing import List, Optional
+
+from .paramspace import gen_neighbors
+from .utils import reverse_series_map, pairs_to_dict
+from . import plotting
 
 # TODO: Generalize documentation
 # TODO: Should _mapping be mapping? Would I want to give names then?
@@ -100,6 +104,189 @@ class Component(object):
             f"max_cells={len(self.union)}, "
             f"min_cells={len(self.intersect)}>"
         )
+
+
+# TODO: Consider making a Mapping
+class ComponentList(Collection):
+    """A set of consistent components identified from many clustering solutions.
+
+    This is considered to be an immutable list, so operations values will be cached.
+    """
+    def __init__(self, components):
+        # Possible checks
+        # 1. Set of parameters should be the same
+        # 2. Should be same reconciler?
+        self._comps = pd.Series(components)
+        if len(self._comps.index) != len(self._comps.index.unique()):
+            raise KeyError("Components must have unique names")
+
+    def __repr__(self):
+        return repr(self._comps)
+
+    def __iter__(self):
+        # NOTE: Should iterate over keys if this is a mapping
+        for comp in self._comps:
+            yield comp
+
+    def __contains__(self, obj):
+        # NOTE: Should check keys if this is a mapping
+        return obj in self._comps.values
+
+    def __len__(self):
+        return len(self._comps)
+
+    # TODO: Decide on kind of indexing this supports. Currently just key based, but accepts iterable key lists
+    def __getitem__(self, key):
+        if key not in self._comps.index:
+            if isinstance(key, Iterable):
+                if not all(subkey in self._comps.index for subkey in key):
+                    raise KeyError(f"Could not find component '{key}'.")
+                else:
+                    return self._comps[key]
+        return self._comps[key]
+
+    @property
+    def components(self):
+        return self._comps.copy()
+
+    def to_graph(self, overlap="intersect") -> nx.DiGraph:
+        """Builds a hierarchichal graph of the components"""
+        comps = self._comps
+        assert overlap in {"intersect", "union"}
+        # get_overlap = lambda x: getattr(x, overlap)
+        assert len(comps.index.unique()) == len(comps)
+        g = nx.DiGraph()
+        for cidx, c in zip(comps.index, comps):
+            g.add_node(cidx, n_solutions=len(c), n_intersect=len(c.intersect), n_union=len(c.union))
+        sets = pd.Series([set(c.intersect) for c in comps], index=comps.index)
+        # sets = pd.Series([set(get_overlap(c)) for c in comps], index=comps.index)
+        for i, j in combinations(comps.index, 2):
+            ci = set(comps[i].intersect)
+            cj = set(comps[j].intersect)
+            intersect = ci & cj
+            if not intersect:
+                continue
+            union = ci | cj
+            direction = np.array([i, j])[np.argsort([len(ci), len(cj)])][::-1]
+            g.add_edge(*direction, weight=len(intersect) / len(union))
+        # Remove edges where all contributing cells are shared with predecessor
+        for n1 in comps.index:
+            adj1 = set(g.successors(n1))
+            to_remove = set()
+            for n2 in adj1:
+                adj2 = set(g.successors(n2))
+                shared = adj1 & adj2
+                if not shared:
+                    continue
+                for n3 in shared:
+                    shared_cells = sets[n3] & sets[n2]
+                    if len(shared_cells & sets[n1]) == len(shared_cells):
+                        to_remove.add((n1, n3))
+            g.remove_edges_from(to_remove)
+        return g
+
+    # Hangs sometimes
+    # def to_subgraphs(self):
+    #     g = self.to_graph()
+    #     return [nx.DiGraph(g.subgraph(c).edges()) for c in list(nx.components.weakly_connected_components(g)) if len(c) > 1]
+
+    def describe(self) -> pd.DataFrame:
+        """Calculates summary statistics for components.
+
+        Example
+        -------
+        >>> stats = comp_list.describe()
+        """
+        comps = self._comps
+        df = pd.DataFrame(index=comps.index)
+        df["n_solutions"] = comps.apply(lambda x: len(x.settings.index))
+        df["n_intersect"] = comps.apply(lambda x: len(x.union))
+        df["n_union"] = comps.apply(lambda x: len(x.intersect))
+        return df
+
+    def filter(
+        self,
+        func: Callable = None,
+        *,
+        min_intersect: int = None,
+        max_intersect: int = None,
+        min_union: int = None,
+        max_union: int = None,
+        min_solutions: int = None,
+        max_solutions: int = None,
+    ):
+        """Filter components from this collection, returns a copy.
+
+        Example
+        -------
+        >>> to_examine = comp_list.filter(min_intersect=20, min_solutions=100)
+        """
+        def calc_mask(values, vmin, vmax):
+            mask = np.ones_like(values, dtype=bool)
+            if vmin is not None:
+                mask &= values >= vmin
+            if vmax is not None:
+                mask &= values <= vmax
+            return mask
+        comps = self._comps.copy()
+        mask = np.ones_like(comps, dtype=bool)
+
+        if func is not None:
+            mask &= comps.apply(func)
+        mask &= calc_mask(
+            comps.apply(lambda x: len(x.intersect)),
+            min_intersect, max_intersect
+        )
+        mask &= calc_mask(
+            comps.apply(lambda x: len(x.union)),
+            min_intersect, max_intersect
+        )
+        mask &= calc_mask(
+            comps.apply(lambda x: len(x.settings.index)),
+            min_solutions, max_solutions
+        )
+        return ComponentList(comps[mask])
+
+    # Plotting methods, probably move to own attribute
+    def plot_components(
+        self,
+        adata: "AnnData",
+        *,
+        show_heatmap=True,
+        x_param="n_neighbors",
+        y_param="resolution",
+    ):
+        comps = self._comps
+        # reduce(np.intersect1d, comps.apply(lambda x: x.settings.columns))
+        stats = self.describe()
+        for k in comps.index:
+            title = f"Component {k}: n_solutions: {stats.loc[k, 'n_solutions']}, n_intersect: {stats.loc[k, 'n_intersect']}, n_union: {stats.loc[k, 'n_union']}"
+            fig = plotting.component(comps[k], adata, x=x_param, y=y_param, umap_kwargs={"show": False, "title": "UMAP"})
+            fig.suptitle(title)
+            plt.show()
+
+    # def plot_graph(self):
+    #     """Plots hierarchies present in components in this object."""
+    #     g = self.to_graph()
+    #     subgs = [nx.DiGraph(g.subgraph(c).edges()) for c in list(nx.components.weakly_connected_components(g)) if len(c) > 1]
+    #     for subg in subgs:
+    #         nx.draw(subg, pos=nx.nx_agraph.graphviz_layout(subg, prog="dot"), with_labels=True)
+    #         plt.show()
+    
+    def plot_hierarchies(self, adata, *, overlap="intersect"):
+        from .clustree import plot_hierarchy
+        from bokeh.layouts import column
+
+        plots = []
+        for hierarchy in nx.components.weakly_connected.weakly_connected_components(self.to_graph(overlap=overlap)):
+            if len(hierarchy) < 2:
+                print(f"Component {list(hierarchy)[0]} was not found in a hierarchy.")
+                continue
+            clist_sub = ComponentList(self._comps[self._comps.index.isin(hierarchy)])
+            plots.append(plot_hierarchy(clist_sub, adata))
+        return column(*plots)
+        # show(column(*plots))
+        
 
 
 class ReconcilerBase(object):
@@ -360,7 +547,7 @@ class Reconciler(ReconcilerBase):
 
     # TODO: Allow passing function for clusters
     def find_components(
-        self, min_weight: float, clusters: Collection[int], min_cells: int = 2
+        self, min_weight: float, clusters: "Collection[int]", min_cells: int = 2
     ) -> List[Component]:
         """
         Return components from filtered graph which contain specified clusters.
