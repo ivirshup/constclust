@@ -1,9 +1,20 @@
+import base64
+from collections import Counter
+from collections.abc import Mapping, Iterable
+from functools import singledispatch
+from itertools import product, chain
+from io import BytesIO
+
 from bokeh.models.graphs import from_networkx, NodesAndLinkedEdges, EdgesAndLinkedNodes
-from bokeh.models import Plot, MultiLine, Circle, HoverTool, ResetTool, Range1d
+from bokeh.models import Plot, MultiLine, Circle, HoverTool, ResetTool, SaveTool, Range1d
+
+import datashader as ds
+import datashader.transfer_functions as tf
+
 import networkx as nx
 import numpy as np
 import pandas as pd
-from itertools import product
+import scanpy as sc
 
 from .aggregate import ReconcilerBase
 # # TODO: Speed this up
@@ -89,7 +100,7 @@ def gen_clustree_plot(g: nx.Graph, pos: dict = None,
         edge_kwargs = dict(line_alpha="edge_alpha", line_width=1)
 
     g_p = g.copy()
-    set_edge_alpha(g_p)
+    # set_edge_alpha(g_p)
 
     plot = Plot(**get_ranges(pos), **plot_kwargs)
 
@@ -120,8 +131,8 @@ def get_ranges(pos):
     all_pos = np.array(list(zip(*pos.values())))
     max_x, max_y = all_pos.max(axis=1)
     min_x, min_y = all_pos.min(axis=1)
-    x_margin = (max_x - min_x) / 10
-    y_margin = (max_y - min_y) / 10
+    x_margin = max((max_x - min_x) / 10, .5)
+    y_margin = max((max_y - min_y) / 10, .5)
     return {"x_range": Range1d(min_x-x_margin, max_x+x_margin),
             "y_range": Range1d(min_y-y_margin, max_y+y_margin)}
 
@@ -165,3 +176,103 @@ def clustree(
 
     return p
 
+#########################
+# Hierarchy
+#########################
+
+def to_img_element(s):
+    if isinstance(s, bytes):
+        s = s.decode("utf-8")
+    return f'<img src="data:image/png;base64,{s}"/>'
+
+def plot_to_bytes(pil_im):
+    with BytesIO() as buf:
+        pil_im.save(buf, format="png")
+        buf.seek(0)
+        byteimage = base64.b64encode(buf.read())
+    return byteimage
+
+# For converting numpy values to python values
+@singledispatch
+def json_friendly(x):
+    return x
+
+def _identity(x):
+    return x
+
+for t in [int, float, str, bool, bytes]:
+    json_friendly.register(t)(_identity)
+
+json_friendly.register(np.integer)(int)
+json_friendly.register(np.floating)(float)
+    
+@json_friendly.register(Mapping)
+def json_friendly_mapping(d):
+    return {json_friendly(k): json_friendly(v) for k, v in d.items()}
+
+@json_friendly.register(Iterable)
+def json_friendly_iterable(l):
+    return [json_friendly(x) for x in l]
+
+# Suprisingly fast
+def calc_freq(comp):
+    rec = comp._parent
+    samples_idx = rec.clusterings.index
+    s = pd.Series(np.zeros(len(samples_idx)), index=samples_idx)
+    c = Counter(chain.from_iterable(rec._mapping.iloc[comp.cluster_ids].values))
+    s.iloc[list(c.keys())] += list(c.values())
+    return s
+
+def ds_umap(df, x="X_umap-0", y="X_umap-1", agg=None):
+    cvs = ds.Canvas(150, 150)
+    pts = cvs.points(df, "X_umap-0", "X_umap-1", agg=agg)
+    im = tf.shade(pts)
+    return to_img_element(plot_to_bytes(im.to_pil()))
+
+def make_umap_plots(clist, adata):
+    plotdf = sc.get.obs_df(adata, obsm_keys=[("X_umap", 0), ("X_umap", 1)])
+    plots = {}
+    for cid, c in zip(clist.components.index, clist):
+        plotdf[str(cid)] = calc_freq(c).loc[plotdf.index]
+        plots[cid] = ds_umap(plotdf, agg=ds.max(str(cid)))
+    return plots
+
+def plot_hierarchy(complist: "ComponentList", adata: "AnnData"):
+    """
+    Params
+    ------
+    complist
+        List of components that will be plotted in this graph.
+    """
+    g = complist.to_graph()
+    assert len(list(nx.components.weakly_connected_components(g))) == 1
+    for k, v in make_umap_plots(complist, adata).items():
+        g.nodes[k]["img"] = v
+
+
+    pos = json_friendly(
+        nx.nx_agraph.graphviz_layout(
+            nx.DiGraph(g.edges(data=False)), 
+            prog="dot"
+        )
+    )
+
+    graph_renderer = from_networkx(g, pos)
+    graph_renderer.node_renderer.glyph = Circle(size=15)
+    graph_renderer.edge_renderer.glyph = MultiLine(line_width=1)
+
+    node_hover = HoverTool(
+        tooltips=[
+            ("img", "@img{safe}"),
+            ("component_id", "@index"),
+            ("# solutions:", "@n_solutions"),
+            ("# samples in intersect", "@n_intersect"),
+            ("# samples in union", "@n_union")
+        ],
+        attachment="vertical"
+    )
+
+    p = Plot(plot_width=1000, plot_height=500, **get_ranges(pos))
+    p.renderers.append(graph_renderer)
+    p.add_tools(node_hover, SaveTool())
+    return p

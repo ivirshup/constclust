@@ -7,7 +7,7 @@ from anndata import AnnData
 import pandas as pd
 from pandas.api.types import is_float_dtype, is_numeric_dtype, is_categorical_dtype
 import numpy as np
-from .aggregate import Component
+# from .aggregate import Component
 from itertools import product
 from typing import Optional
 
@@ -29,7 +29,7 @@ def _fix_seaborn_float_labels(axis):
 # TODO: Add title arg
 # TODO: crosstab instead of pivot_table?
 def component_param_range(
-    component: Component,
+    component: "Component",
     x: str = "n_neighbors",
     y: str = "resolution",
     ax: Optional[mpl.axis.Axis] = None
@@ -120,6 +120,7 @@ def umap(component, adata, ax=None, umap_kwargs={}):
     cell_value = pd.Series(0, index=adata.obs_names, dtype=float)
     # present_freqs = component.cell_frequency
     # cell_value[present_freqs.index] = present_freqs
+    # TODO: Apparently, this is super slow. Sum on a ndarray instead
     for cluster in component.cluster_ids:
         cell_value[component._parent._mapping.iloc[cluster]] += 1
     cell_value = cell_value / cell_value.max()
@@ -179,7 +180,7 @@ def global_stability(settings, clusters, x="n_neighbors", y="resolution", cmap=s
     cb.outline.set_visible(False)
 
 
-def component(component: Component,
+def component(component: "Component",
               adata: AnnData,
               x: str = "n_neighbors",
               y: str = "resolution",
