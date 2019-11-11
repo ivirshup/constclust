@@ -6,7 +6,7 @@ from itertools import product, chain
 from io import BytesIO
 
 from bokeh.models.graphs import from_networkx, NodesAndLinkedEdges, EdgesAndLinkedNodes
-from bokeh.models import Plot, MultiLine, Circle, HoverTool, ResetTool, SaveTool, Range1d
+from bokeh.models import Plot, MultiLine, Circle, HoverTool, ResetTool, SaveTool, Range1d, LabelSet, ColumnDataSource
 
 import datashader as ds
 import datashader.transfer_functions as tf
@@ -205,6 +205,9 @@ for t in [int, float, str, bool, bytes]:
 
 json_friendly.register(np.integer)(int)
 json_friendly.register(np.floating)(float)
+json_friendly.register(np.str_)(str)
+json_friendly.register(np.string_)(str)
+json_friendly.register(np.bool_)(bool)
     
 @json_friendly.register(Mapping)
 def json_friendly_mapping(d):
@@ -223,8 +226,8 @@ def calc_freq(comp):
     s.iloc[list(c.keys())] += list(c.values())
     return s
 
-def ds_umap(df, x="X_umap-0", y="X_umap-1", agg=None):
-    cvs = ds.Canvas(150, 150)
+def ds_umap(df, x="X_umap-0", y="X_umap-1", *, agg=None, width=150, height=150):
+    cvs = ds.Canvas(width, height)
     pts = cvs.points(df, "X_umap-0", "X_umap-1", agg=agg)
     im = tf.shade(pts)
     return to_img_element(plot_to_bytes(im.to_pil()))
@@ -272,7 +275,26 @@ def plot_hierarchy(complist: "ComponentList", adata: "AnnData"):
         attachment="vertical"
     )
 
+    # Adding labels
+    label_src = pd.DataFrame.from_dict(
+        graph_renderer.layout_provider.graph_layout,
+        orient="index", columns=["x", "y"]
+    )
+    label_src.index.name = "nodeid"
+    label_src = ColumnDataSource(label_src)
+
+    node_label = LabelSet(
+        x="x", y="y", text="nodeid", level="annotation", source=label_src, text_align="center",
+    )
+
+    # layout = graph_renderer.layout_provider.graph_layout
+    # label, x, y = zip(*((str(label), x, y) for label, (x, y) in layout.items()))
+    # node_label = LabelSet(
+    #     x=x, y=y, text=label, level="glyph"
+    # )
+
     p = Plot(plot_width=1000, plot_height=500, **get_ranges(pos))
     p.renderers.append(graph_renderer)
+    p.add_layout(node_label)
     p.add_tools(node_hover, SaveTool())
     return p
