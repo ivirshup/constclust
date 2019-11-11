@@ -119,6 +119,7 @@ class ComponentList(Collection):
         self._comps = pd.Series(components)
         if len(self._comps.index) != len(self._comps.index.unique()):
             raise KeyError("Components must have unique names")
+        self._comps.index.name = "component"
 
     def __repr__(self):
         return repr(self._comps)
@@ -190,6 +191,7 @@ class ComponentList(Collection):
     #     g = self.to_graph()
     #     return [nx.DiGraph(g.subgraph(c).edges()) for c in list(nx.components.weakly_connected_components(g)) if len(c) > 1]
 
+    # TODO: Add summary of ordered parameters
     def describe(self) -> pd.DataFrame:
         """Calculates summary statistics for components.
 
@@ -214,7 +216,7 @@ class ComponentList(Collection):
         max_union: int = None,
         min_solutions: int = None,
         max_solutions: int = None,
-    ):
+    ) -> "ComponentList":
         """Filter components from this collection, returns a copy.
 
         Example

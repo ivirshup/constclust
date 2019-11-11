@@ -4,7 +4,7 @@ __version__ = get_versions()['version']
 del get_versions
 
 import sys
-from scanpy.utils import annotate_doc_types
+from scanpy._utils import annotate_doc_types
 from .aggregate import reconcile, comp_stats
 from .cluster import cluster, cluster_batch_bbknn
 

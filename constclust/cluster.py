@@ -105,7 +105,7 @@ def cluster(
     ):
         # Neighbor finding is already multithreaded (sorta)
         sc.pp.neighbors(adata, n_neighbors=n, random_state=seed, **neighbor_kwargs)
-        g = sc.utils.get_igraph_from_adjacency(
+        g = sc._utils.get_igraph_from_adjacency(
             adata.uns["neighbors"]["connectivities"], directed=True
         )
         neighbor_graphs.append({"n_neighbors": n, "random_state": seed, "graph": g})
@@ -225,7 +225,7 @@ def cluster_batch_bbknn(
             **bbknn_kwargs
         )
         # sc.pp.neighbors(adata, n_neighbors=n, random_state=seed, **neighbor_kwargs)
-        g = sc.utils.get_igraph_from_adjacency(c, directed=True)
+        g = sc._utils.get_igraph_from_adjacency(c, directed=True)
         neighbor_graphs.append({"neighbors_within_batch": n, "trim": t, "graph": g})
     cluster_jobs = []
     for graph, res, seed in product(neighbor_graphs, resolutions, random_state):
