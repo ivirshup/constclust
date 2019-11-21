@@ -202,8 +202,8 @@ class ComponentList(Collection):
         comps = self._comps
         df = pd.DataFrame(index=comps.index)
         df["n_solutions"] = comps.apply(lambda x: len(x.settings.index))
-        df["n_intersect"] = comps.apply(lambda x: len(x.union))
-        df["n_union"] = comps.apply(lambda x: len(x.intersect))
+        df["n_intersect"] = comps.apply(lambda x: len(x.intersect))
+        df["n_union"] = comps.apply(lambda x: len(x.union))
         return df
 
     def filter(
