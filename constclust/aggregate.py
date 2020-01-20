@@ -607,10 +607,12 @@ class Reconciler(ReconcilerBase):
         out = [
             Component(self, c) for c in components
         ]  # This is slow, probably due to finding the union and intersect
-        return sorted(
-            filter(lambda x: len(x.intersect) >= min_cells, out),
-            key=lambda x: (len(x.settings), len(x.intersect)),
-            reverse=True,
+        return ComponentList(
+            sorted(
+                filter(lambda x: len(x.intersect) >= min_cells, out),
+                key=lambda x: (len(x.settings), len(x.intersect)),
+                reverse=True,
+            )
         )
 
     def get_components(self, min_weight: float, min_cells: int = 2):
@@ -641,7 +643,7 @@ class Reconciler(ReconcilerBase):
                 continue
             comps.append(comp)
         comps.sort(key=lambda x: (len(x.settings), len(x.intersect)), reverse=True)
-        return comps
+        return ComponentList(comps)
 
 
 def reconcile(
