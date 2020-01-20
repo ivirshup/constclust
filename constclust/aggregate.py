@@ -12,7 +12,7 @@ from pandas.api.types import (
 from sklearn import metrics
 import matplotlib.pyplot as plt
 
-from collections.abc import Collection, Callable, Iterable
+from collections.abc import Collection, Callable, Iterable, Hashable
 from functools import reduce, partial
 from itertools import chain, combinations
 from multiprocessing import Pool
@@ -138,12 +138,15 @@ class ComponentList(Collection):
 
     # TODO: Decide on kind of indexing this supports. Currently just key based, but accepts iterable key lists
     def __getitem__(self, key):
-        if key not in self._comps.index:
-            if isinstance(key, Iterable):
-                if not all(subkey in self._comps.index for subkey in key):
-                    raise KeyError(f"Could not find component '{key}'.")
-                else:
-                    return self._comps[key]
+        if isinstance(key, Hashable) and key in self._comps.index:
+            return self._comps[key]
+        elif isinstance(key, Iterable):
+            if not all(subkey in self._comps.index for subkey in key):
+                raise KeyError(f"Could not find component '{key}'.")
+            else:
+                return ComponentList(self._comps[key])
+        elif isinstance(key, slice):
+            return ComponentList(self._comps[key])
         return self._comps[key]
 
     @property
