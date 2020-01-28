@@ -10,6 +10,7 @@ from pandas.api.types import (
     is_numeric_dtype
 )
 from sklearn import metrics
+from scipy import sparse
 import matplotlib.pyplot as plt
 
 from collections.abc import Collection, Callable, Iterable, Hashable
@@ -251,6 +252,26 @@ class ComponentList(Collection):
             min_solutions, max_solutions
         )
         return ComponentList(comps[mask])
+
+    def one_hot(self, as_sparse=False):
+        shape = (len(self), len(self[0]._parent.clusterings))
+        indptr = np.zeros(len(self) + 1, dtype=int)
+        curr = 0
+        for i, comp in enumerate(self._comps):
+            curr += len(comp.intersect)
+            indptr[i + 1] = curr
+        indices = np.zeros(curr, dtype=int)
+        data = np.ones(curr, dtype=bool)
+        for i, comp in enumerate(self._comps):
+            indices[indptr[i]:indptr[i+1]] = comp.intersect
+        mtx = sparse.csr_matrix((data, indices, indptr), shape=shape)
+        if not as_sparse:
+            mtx = pd.DataFrame(
+                mtx.toarray(),
+                index=self._comps.index,
+                columns=self[0]._parent.clusterings.index
+            )
+        return mtx
 
     # Plotting methods, probably move to own attribute
     def plot_components(

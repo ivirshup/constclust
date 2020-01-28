@@ -1,3 +1,4 @@
+import numpy as np
 from .test_aggregate import clustering_run
 from constclust import ComponentList, Component, reconcile
 
@@ -20,3 +21,19 @@ def test_reconciler_creation(clustering_run):
     )
     assert type(complist) is ComponentList
     # TODO: What else should be true about this?
+
+
+def test_one_hot(clustering_run):
+    params, clusts = clustering_run
+    r = reconcile(params, clusts)
+    complist = r.get_components(0.9).filter(min_solutions=5)
+
+    encoded = complist.one_hot()
+    encoded_sparse = complist.one_hot(as_sparse=True)
+
+    actual_lengths = [len(c.intersect) for c in complist]
+    assert list(encoded.sum(axis=1).values) == actual_lengths
+    assert list(np.ravel(encoded_sparse.sum(axis=1))) == actual_lengths
+
+    for name, comp in complist._comps.items():
+        assert np.all(encoded[comp.intersect_names].loc[name] == True)
