@@ -226,30 +226,41 @@ def calc_freq(comp):
     s.iloc[list(c.keys())] += list(c.values())
     return s
 
-def ds_umap(df, x="X_umap-0", y="X_umap-1", *, agg=None, width=150, height=150):
+def ds_umap(
+    df: pd.DataFrame,
+    x="X_umap-0",
+    y="X_umap-1",
+    *,
+    agg=None,
+    width: int = 150,
+    height: int = 150,
+    shade_kwargs: Mapping = {},
+):
+    shade_kwargs = {"how": "linear", **shade_kwargs}
     cvs = ds.Canvas(width, height)
-    pts = cvs.points(df, "X_umap-0", "X_umap-1", agg=agg)
-    im = tf.shade(pts)
+    pts = cvs.points(df, x, y, agg=agg)
+    im = tf.shade(pts, **shade_kwargs)
     return to_img_element(plot_to_bytes(im.to_pil()))
 
-def make_umap_plots(clist, adata):
+def make_umap_plots(clist, adata, scatter_kwargs={}):
     plotdf = sc.get.obs_df(adata, obsm_keys=[("X_umap", 0), ("X_umap", 1)])
     plots = {}
     for cid, c in zip(clist.components.index, clist):
         plotdf[str(cid)] = calc_freq(c).loc[plotdf.index]
-        plots[cid] = ds_umap(plotdf, agg=ds.max(str(cid)))
+        plots[cid] = ds_umap(plotdf, agg=ds.max(str(cid)), **scatter_kwargs)
     return plots
 
-def plot_hierarchy(complist: "ComponentList", adata: "AnnData"):
+def plot_hierarchy(complist: "ComponentList", adata: "AnnData", scatter_kwargs={}):
     """
     Params
     ------
     complist
         List of components that will be plotted in this graph.
     """
+    scatter_kwargs = scatter_kwargs.copy()
     g = complist.to_graph()
     assert len(list(nx.components.weakly_connected_components(g))) == 1
-    for k, v in make_umap_plots(complist, adata).items():
+    for k, v in make_umap_plots(complist, adata, scatter_kwargs=scatter_kwargs).items():
         g.nodes[k]["img"] = v
 
 

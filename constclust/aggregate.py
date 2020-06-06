@@ -298,8 +298,8 @@ class ComponentList(Collection):
     #     for subg in subgs:
     #         nx.draw(subg, pos=nx.nx_agraph.graphviz_layout(subg, prog="dot"), with_labels=True)
     #         plt.show()
-    
-    def plot_hierarchies(self, adata, *, overlap="intersect"):
+
+    def plot_hierarchies(self, adata, *, overlap="intersect", **kwargs):
         from .clustree import plot_hierarchy
         from bokeh.layouts import column
 
@@ -309,10 +309,10 @@ class ComponentList(Collection):
                 print(f"Component {list(hierarchy)[0]} was not found in a hierarchy.")
                 continue
             clist_sub = ComponentList(self._comps[self._comps.index.isin(hierarchy)])
-            plots.append(plot_hierarchy(clist_sub, adata))
+            plots.append(plot_hierarchy(clist_sub, adata, **kwargs))
         return column(*plots)
         # show(column(*plots))
-        
+
 
 
 class ReconcilerBase(object):
