@@ -106,7 +106,7 @@ def cluster(
         # Neighbor finding is already multithreaded (sorta)
         sc.pp.neighbors(adata, n_neighbors=n, random_state=seed, **neighbor_kwargs)
         g = sc._utils.get_igraph_from_adjacency(
-            adata.uns["neighbors"]["connectivities"], directed=True
+            adata.obsp["connectivities"], directed=True
         )
         neighbor_graphs.append({"n_neighbors": n, "random_state": seed, "graph": g})
     cluster_jobs = []
