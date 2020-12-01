@@ -12,7 +12,7 @@ Reconciling
 .. autofunction:: constclust.reconcile
 
 .. automodule:: constclust.aggregate
-    :members:   ReconcilerBase, Reconciler, ReconcilerSubset, Component
+    :members:   ReconcilerBase, Reconciler, ReconcilerSubset, Component, ComponentList
 
 Plotting
 --------
