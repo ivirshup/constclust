@@ -9,7 +9,7 @@ setup(
     url="https://github.com/ivirshup/ConsistentClusters",
     author="Isaac Virshup",
     author_email="ivirshup@gmail.com",
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     install_requires=[
         l.strip() for l in
         Path('requirements.txt').read_text('utf-8').splitlines()

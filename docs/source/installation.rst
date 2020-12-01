@@ -4,7 +4,7 @@ Installation
 Requirements
 ------------
 
-``constclust`` requires Python v3.6+
+``constclust`` requires Python v3.7+
 
 Installing with pip
 -------------------
