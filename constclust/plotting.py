@@ -227,7 +227,7 @@ def component(component: "Component",
 
 
 def edge_weight_distribution(recon, **kwargs):
-    return sns.distplot(recon.graph.es["weight"], **kwargs)
+    return sns.histplot(recon.graph.es["weight"], **kwargs)
 
 # Modified from seaborn
 def _tick_step(ax, labels, axis):

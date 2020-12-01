@@ -5,7 +5,8 @@ from functools import singledispatch
 from itertools import product, chain
 from io import BytesIO
 
-from bokeh.models.graphs import from_networkx, NodesAndLinkedEdges, EdgesAndLinkedNodes
+from bokeh.plotting import from_networkx
+from bokeh.models.graphs import NodesAndLinkedEdges, EdgesAndLinkedNodes
 from bokeh.models import Plot, MultiLine, Circle, HoverTool, ResetTool, SaveTool, Range1d, LabelSet, ColumnDataSource
 
 import datashader as ds
@@ -25,7 +26,7 @@ def gen_clustree(cluster_df):
     Generates a nx.Digraph based clustree.
 
     Can be plotted with:
-    
+
     ```python
     dg = gen_clustree(cluster_df)
     nx.draw_networkx(dg, pos=nx.nx_agraph.graphviz_layout(dg, prog="dot"))
