@@ -17,14 +17,14 @@ def clustering_run(request) -> Tuple[pd.DataFrame, pd.DataFrame]:
               "c": list(range(3))}  # unordered
     settings = pd.DataFrame(product(*params.values()), columns=params.keys())
     clusterings = pd.DataFrame(
-        np.zeros((len(cells), len(settings)), dtype=np.integer),
+        np.zeros((len(cells), len(settings)), dtype=int),
         index=cells.astype(request.param),
         columns=settings.index
     )
     mask = settings["a"] > settings["b"]
     # I should change this to be deterministic
-    component1 = lambda : np.append(np.zeros(50, dtype=np.integer), np.random.randint(1, 6, 50))
-    component2 = lambda : np.append(np.random.randint(1, 6, 50), np.zeros(50, dtype=np.integer))
+    component1 = lambda : np.append(np.zeros(50, dtype=int), np.random.randint(1, 6, 50))
+    component2 = lambda : np.append(np.random.randint(1, 6, 50), np.zeros(50, dtype=int))
     for i, b in mask.items():
         if b:
             clusterings[i] = component1()
