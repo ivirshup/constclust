@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from . import aggregate
 import seaborn as sns
 import matplotlib as mpl
@@ -7,7 +9,6 @@ from anndata import AnnData
 import pandas as pd
 from pandas.api.types import is_float_dtype, is_numeric_dtype, is_categorical_dtype
 import numpy as np
-# from .aggregate import Component
 from itertools import product
 from typing import Optional
 
@@ -29,7 +30,7 @@ def _fix_seaborn_float_labels(axis):
 # TODO: Add title arg
 # TODO: crosstab instead of pivot_table?
 def component_param_range(
-    component: "Component",
+    component: "aggregate.Component",
     x: str = "n_neighbors",
     y: str = "resolution",
     ax: Optional[mpl.axis.Axis] = None
