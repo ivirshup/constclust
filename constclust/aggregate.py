@@ -595,7 +595,7 @@ class Reconciler(ReconcilerBase):
         # Get mapping from clustering to clusters
         # Because this is an Reconciler object, we can just index by position into the mapping
         clusteringtocluster = {
-            k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping[clusters].index)).items()
+            k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping.loc[(slice(None), clusters)].index)).items()
         }
         # Only look for clusters in graph
         clusters = np.intersect1d(clusters, sub_g.vs["cluster_id"], assume_unique=True)
