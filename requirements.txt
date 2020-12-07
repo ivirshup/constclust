@@ -10,6 +10,10 @@ seaborn
 leidenalg
 tqdm
 
+bokeh
+datashader
+pygraphviz
+
 sphinx-autodoc-typehints
 scanpydoc
 sphinx_rtd_theme
