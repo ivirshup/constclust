@@ -1,6 +1,12 @@
 Tutorials
 =========
 
-Tutorials can be found under the ``notebooks`` directory of the main repository. To get an overview of the method I recommend checking out the `interface notebook`_.
+Tutorials are available as jupyter notebooks.
 
-.. _`interface notebook`: https://github.com/ivirshup/constclust/blob/master/notebooks/interface.ipynb
+* An `overview of the API`_.
+* A walkthrough of the `simulated study`_ included in the preprint.
+* Looking at `hierarchichal structure in PBMCs`_, also from the preprint.
+
+.. _`overview of the API`: https://github.com/ivirshup/constclust/blob/master/notebooks/interface.ipynb
+.. _`simulated study`: https://nbviewer.jupyter.org/github/ivirshup/constclust_supp/blob/master/simulated/simulated.ipynb
+.. _`hierarchichal structure in PBMCs`: https://nbviewer.jupyter.org/github/ivirshup/constclust_supp/blob/master/pbmc/pbmc-overview.ipynb
