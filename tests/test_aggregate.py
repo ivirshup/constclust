@@ -12,19 +12,21 @@ import numpy as np
 @pytest.fixture(params=[str, int])
 def clustering_run(request) -> Tuple[pd.DataFrame, pd.DataFrame]:
     cells = np.arange(100)
-    params = {"a": list(range(4)),  # ordered
-              "b": list(range(4)),  # ordered
-              "c": list(range(3))}  # unordered
+    params = {
+        "a": list(range(4)),  # ordered
+        "b": list(range(4)),  # ordered
+        "c": list(range(3)),
+    }  # unordered
     settings = pd.DataFrame(product(*params.values()), columns=params.keys())
     clusterings = pd.DataFrame(
         np.zeros((len(cells), len(settings)), dtype=int),
         index=cells.astype(request.param),
-        columns=settings.index
+        columns=settings.index,
     )
     mask = settings["a"] > settings["b"]
     # I should change this to be deterministic
-    component1 = lambda : np.append(np.zeros(50, dtype=int), np.random.randint(1, 6, 50))
-    component2 = lambda : np.append(np.random.randint(1, 6, 50), np.zeros(50, dtype=int))
+    component1 = lambda: np.append(np.zeros(50, dtype=int), np.random.randint(1, 6, 50))
+    component2 = lambda: np.append(np.random.randint(1, 6, 50), np.zeros(50, dtype=int))
     for i, b in mask.items():
         if b:
             clusterings[i] = component1()
@@ -48,11 +50,17 @@ def test_subsetting(clustering_run: Tuple[pd.DataFrame, pd.DataFrame]):
     by_cells_comps = by_cells.get_components(0.9)
     assert all(by_cells._obs_names == recon._obs_names[slice(50, 100)])
     assert len(by_cells_comps) == 1
-    assert all(np.sort(by_cells_comps[0].intersect_names) == np.sort(by_cells.clusterings.index))
+    assert all(
+        np.sort(by_cells_comps[0].intersect_names)
+        == np.sort(by_cells.clusterings.index)
+    )
     by_settings = recon.subset_clusterings(lambda x: x["a"] < 2)
     assert (len(recon.settings) / 2) == len(by_settings.settings)
     assert (recon.clusterings.shape[1] / 2) == by_settings.clusterings.shape[1]
-    assert all(by_settings._mapping.index.get_level_values("clustering").unique() == by_settings.settings.index)
+    assert all(
+        by_settings._mapping.index.get_level_values("clustering").unique()
+        == by_settings.settings.index
+    )
     assert all(by_settings.cluster_ids == np.unique(by_settings.clusterings.stack()))
 
 
@@ -72,13 +80,19 @@ def test_naming(clustering_run: Tuple[pd.DataFrame, pd.DataFrame]):
 
 def test_component_neighbors(clustering_run):
     recon = reconcile(*clustering_run)
-    cs = recon.get_components(.9)
+    cs = recon.get_components(0.9)
     all_ns = gen_neighbors(clustering_run[0], "oou")
     for c in cs:
         comp_clusterings = c.settings.index
-        subset_all_ns = set(filter(lambda x: (x[0] in comp_clusterings) and (x[1] in comp_clusterings), all_ns))
+        subset_all_ns = set(
+            filter(
+                lambda x: (x[0] in comp_clusterings) and (x[1] in comp_clusterings),
+                all_ns,
+            )
+        )
         subset_ns = set(gen_neighbors(c.settings, "oou"))
         assert subset_all_ns == subset_ns
+
 
 # TODO: Need a test case for this
 # def test_component_list_filter(clustering_run):

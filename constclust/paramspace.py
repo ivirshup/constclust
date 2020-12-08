@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn import metrics
 from itertools import repeat, groupby, product, combinations
+
 # import plotly.graph_objs as go
 
 
@@ -27,6 +28,7 @@ from itertools import repeat, groupby, product, combinations
 #             new_s = s._replace(**{k: settings_idx[k][pos]})
 #             edges.append((s, new_s))
 #     return edges
+
 
 def gen_neighbors(settings, orders=None):
     """
@@ -49,10 +51,12 @@ def gen_neighbors(settings, orders=None):
     else:  # Assert only "o", "u" are in orders
         assert set(orders).issubset({"o", "u"})
     # Consider using natsort
-    ordered_settings = {x: sorted(settings[x].unique()) for x, o in zip(
-        settings, orders) if o == "o"}
-    unordered_settings = {x: list(settings[x].unique()) for x, o in zip(
-        settings, orders) if o == "u"}
+    ordered_settings = {
+        x: sorted(settings[x].unique()) for x, o in zip(settings, orders) if o == "o"
+    }
+    unordered_settings = {
+        x: list(settings[x].unique()) for x, o in zip(settings, orders) if o == "u"
+    }
     reverse_map = dict(zip(settings.itertuples(index=False), settings.index))
     edges = []
     for s in settings.itertuples(index=False):
@@ -80,12 +84,12 @@ def gen_neighbors(settings, orders=None):
 # def build_network(cluster_df, settings_df, params, edge_metric=metrics.adjusted_rand_score):
 #     """
 #     Create network of clustering solutions.
-    
+
 #     Args:
 #         cluster_df (pd.DataFrame):
 #             Dataframe where each column is a clustering solution for the dataset
 #         settings_df (pd.DataFrame):
-#             Contains settings for each clustering run. 
+#             Contains settings for each clustering run.
 #         params (list(str)):
 #             The parameters which were varied.
 #         edge_metric (function):
@@ -151,7 +155,7 @@ def gen_neighbors(settings, orders=None):
 # def gen_color_bar(line_trace):
 #     """
 #     Because the line plot won't show a colour bar, this function generates a trace which should show the color bar.
-    
+
 #     Generally, this function is waiting on: https://github.com/plotly/plotly.py/issues/1085
 #     """
 #     return go.Scatter3d(
@@ -200,7 +204,7 @@ def gen_neighbors(settings, orders=None):
 # def plot_network(g, x_param, y_param, z_key, layout_kwargs={}):
 #     """
 #     Plots grid network of parameters.
-    
+
 #     Args:
 #         g (nx.Graph):
 #             Graph of clustering solutions.
@@ -236,7 +240,7 @@ def gen_neighbors(settings, orders=None):
 # def plot_network_widget(g, x_param, y_param, z_key, layout_kwargs={}):
 #     """
 #     Plots grid network of parameters.
-    
+
 #     Args:
 #         g (nx.Graph):
 #             Graph of clustering solutions.

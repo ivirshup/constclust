@@ -6,13 +6,16 @@ import scanpy as sc
 
 def test_clustering():
     adata = sc.datasets.pbmc68k_reduced()
-    cluster(adata, n_neighbors=[15, 30], resolutions=[1., 2.], random_state=[0, 1])
+    cluster(adata, n_neighbors=[15, 30], resolutions=[1.0, 2.0], random_state=[0, 1])
 
 
 def test_clustering_kwargs():
     adata = sc.datasets.pbmc68k_reduced()
     cluster(
-        adata, n_neighbors=[15, 30], resolutions=[1., 2.], random_state=[0, 1],
+        adata,
+        n_neighbors=[15, 30],
+        resolutions=[1.0, 2.0],
+        random_state=[0, 1],
         leiden_kwargs={"weights": None},
-        neighbor_kwargs={"use_rep": "X", "metric": "cosine"}
+        neighbor_kwargs={"use_rep": "X", "metric": "cosine"},
     )

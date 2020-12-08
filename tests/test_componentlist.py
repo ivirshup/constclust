@@ -17,11 +17,7 @@ def test_subsetting_basic(clustering_run):
 def test_reconciler_creation(clustering_run):
     params, clusts = clustering_run
     r = reconcile(params, clusts)
-    complist = (
-        r
-        .subset_cells(clusts.index[:len(clusts) // 2])
-        .get_components(0.9)
-    )
+    complist = r.subset_cells(clusts.index[: len(clusts) // 2]).get_components(0.9)
     assert type(complist) is ComponentList
     # TODO: What else should be true about this?
 

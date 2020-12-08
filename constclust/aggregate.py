@@ -15,7 +15,7 @@ from pandas.api.types import (
     is_categorical_dtype,
     is_integer_dtype,
     is_bool_dtype,
-    is_numeric_dtype
+    is_numeric_dtype,
 )
 from sklearn import metrics
 from scipy import sparse
@@ -56,7 +56,9 @@ class Component(object):
         self._parent = reconciler
         self.cluster_ids = np.sort(cluster_ids)
         # TODO: Should a component found via a subset only return the clusters in the subset?
-        clusterings = self._parent._mapping.index.get_level_values("clustering")[cluster_ids]  # Should already be unique
+        clusterings = self._parent._mapping.index.get_level_values("clustering")[
+            cluster_ids
+        ]  # Should already be unique
         self.settings = self._parent.settings.loc[clusterings]
         cells = self._parent._mapping.iloc[cluster_ids].values
         # TODO: I could just figure out how big these are, and make their contents lazily evaluated. I think this would be a pretty big speed up for interactive work.
@@ -115,6 +117,7 @@ class ComponentList(Collection):
 
     This is considered to be an immutable list, so operations values will be cached.
     """
+
     def __init__(self, components):
         # Possible checks
         # 1. Set of parameters should be the same
@@ -170,7 +173,12 @@ class ComponentList(Collection):
         assert len(comps.index.unique()) == len(comps)
         g = nx.DiGraph()
         for cidx, c in zip(comps.index, comps):
-            g.add_node(cidx, n_solutions=len(c), n_intersect=len(c.intersect), n_union=len(c.union))
+            g.add_node(
+                cidx,
+                n_solutions=len(c),
+                n_intersect=len(c.intersect),
+                n_union=len(c.union),
+            )
         sets = pd.Series([set(c.intersect) for c in comps], index=comps.index)
         # sets = pd.Series([set(get_overlap(c)) for c in comps], index=comps.index)
         for i, j in combinations(comps.index, 2):
@@ -235,6 +243,7 @@ class ComponentList(Collection):
         -------
         >>> to_examine = comp_list.filter(min_intersect=20, min_solutions=100)
         """
+
         def calc_mask(values, vmin, vmax):
             mask = np.ones_like(values, dtype=bool)
             if vmin is not None:
@@ -242,22 +251,20 @@ class ComponentList(Collection):
             if vmax is not None:
                 mask &= values <= vmax
             return mask
+
         comps = self._comps.copy()
         mask = np.ones_like(comps, dtype=bool)
 
         if func is not None:
             mask &= comps.apply(func)
         mask &= calc_mask(
-            comps.apply(lambda x: len(x.intersect)),
-            min_intersect, max_intersect
+            comps.apply(lambda x: len(x.intersect)), min_intersect, max_intersect
         )
         mask &= calc_mask(
-            comps.apply(lambda x: len(x.union)),
-            min_intersect, max_intersect
+            comps.apply(lambda x: len(x.union)), min_intersect, max_intersect
         )
         mask &= calc_mask(
-            comps.apply(lambda x: len(x.settings.index)),
-            min_solutions, max_solutions
+            comps.apply(lambda x: len(x.settings.index)), min_solutions, max_solutions
         )
         return ComponentList(comps[mask])
 
@@ -271,13 +278,13 @@ class ComponentList(Collection):
         indices = np.zeros(curr, dtype=int)
         data = np.ones(curr, dtype=bool)
         for i, comp in enumerate(self._comps):
-            indices[indptr[i]:indptr[i+1]] = comp.intersect
+            indices[indptr[i] : indptr[i + 1]] = comp.intersect
         mtx = sparse.csr_matrix((data, indices, indptr), shape=shape)
         if not as_sparse:
             mtx = pd.DataFrame(
                 mtx.toarray(),
                 index=self._comps.index,
-                columns=self[0]._parent.clusterings.index
+                columns=self[0]._parent.clusterings.index,
             )
         return mtx
 
@@ -320,7 +327,14 @@ class ComponentList(Collection):
         stats = self.describe()
         for k in comps.index:
             title = f"Component {k}: n_solutions: {stats.loc[k, 'n_solutions']}, n_intersect: {stats.loc[k, 'n_intersect']}, n_union: {stats.loc[k, 'n_union']}"
-            fig = plotting.component(comps[k], adata, embedding_basis=embedding_basis, x=x_param, y=y_param, embedding_kwargs=embedding_kwargs)
+            fig = plotting.component(
+                comps[k],
+                adata,
+                embedding_basis=embedding_basis,
+                x=x_param,
+                y=y_param,
+                embedding_kwargs=embedding_kwargs,
+            )
             fig.suptitle(title)
             plt.show()
 
@@ -332,7 +346,13 @@ class ComponentList(Collection):
     #         nx.draw(subg, pos=nx.nx_agraph.graphviz_layout(subg, prog="dot"), with_labels=True)
     #         plt.show()
 
-    def plot_hierarchies(self, coords: Union[np.ndarray, pd.DataFrame], *, overlap="intersect", scatter_kwargs: Mapping = MappingProxyType({})):
+    def plot_hierarchies(
+        self,
+        coords: Union[np.ndarray, pd.DataFrame],
+        *,
+        overlap="intersect",
+        scatter_kwargs: Mapping = MappingProxyType({}),
+    ):
         """Find and plot interactive hierarchies of components.
 
         Params
@@ -356,6 +376,7 @@ class ComponentList(Collection):
         """
         from .clustree import plot_hierarchy
         from bokeh.layouts import column
+
         if coords.shape != (len(self.obs_names), 2):
             raise ValueError(
                 f"`coords` must have shape: {(len(self.obs_names), 2)}, had shape: {coords.shape}."
@@ -363,19 +384,24 @@ class ComponentList(Collection):
 
         if isinstance(coords, pd.DataFrame):
             coords.reindex(index=self.obs_names)
-            assert coords.index.equals(self.obs_names), "coords index did not match self.obs_names"
+            assert coords.index.equals(
+                self.obs_names
+            ), "coords index did not match self.obs_names"
         else:
             coords = pd.DataFrame(coords, columns=["x", "y"], index=self.obs_names)
 
         plots = []
-        for hierarchy in nx.components.weakly_connected.weakly_connected_components(self.to_graph(overlap=overlap)):
+        for hierarchy in nx.components.weakly_connected.weakly_connected_components(
+            self.to_graph(overlap=overlap)
+        ):
             if len(hierarchy) < 2:
                 print(f"Component {list(hierarchy)[0]} was not found in a hierarchy.")
                 continue
             clist_sub = ComponentList(self._comps[self._comps.index.isin(hierarchy)])
-            plots.append(plot_hierarchy(clist_sub, coords, scatter_kwargs=scatter_kwargs))
+            plots.append(
+                plot_hierarchy(clist_sub, coords, scatter_kwargs=scatter_kwargs)
+            )
         return column(*plots)
-
 
 
 class ReconcilerBase(object):
@@ -384,6 +410,7 @@ class ReconcilerBase(object):
 
     Has methods for subsetting implemented, providing data is up to subclass.
     """
+
     def __repr__(self):
         kls = self.__class__.__name__
         n_cells = len(self.clusterings)
@@ -437,7 +464,11 @@ class ReconcilerBase(object):
         clusterings_to_keep = self.settings.loc[clusterings_to_keep].index.values
         new_settings = self.settings.loc[clusterings_to_keep]  # Should these be copies?
         new_clusters = self.clusterings.loc[:, clusterings_to_keep]  # This is a copy?
-        new_mapping = self._mapping[np.isin(self._mapping.index.get_level_values("clustering"), clusterings_to_keep)]
+        new_mapping = self._mapping[
+            np.isin(
+                self._mapping.index.get_level_values("clustering"), clusterings_to_keep
+            )
+        ]
         return ReconcilerSubset(
             self._parent, new_settings, new_clusters, new_mapping, self.graph
         )
@@ -459,7 +490,9 @@ class ReconcilerBase(object):
         intmap = reverse_series_map(self._obs_names)
         cells_to_keep = intmap[self.clusterings.loc[cells_to_keep].index.values]
         new_clusterings = self.clusterings.iloc[cells_to_keep, :]
-        new_mapping = gen_mapping(new_clusterings).apply(lambda x: cells_to_keep.values[x])
+        new_mapping = gen_mapping(new_clusterings).apply(
+            lambda x: cells_to_keep.values[x]
+        )
         # TODO: test how long this takes
         new_rec = ReconcilerSubset(
             self._parent,
@@ -491,11 +524,15 @@ class ReconcilerBase(object):
         -------
         >>> import hvplot.pandas
         >>> clusters = reconciler.describe_clusters(log1p=True)
-        >>> clusters.hvplot.scatter("log1p_resolution", "log1p_n_obs", datashade=True, dynspread=True)
+        >>> clusters.hvplot.scatter(
+            "log1p_resolution",
+            "log1p_n_obs",
+            datashade=True,
+            dynspread=True
+        )
         """
         lens = pd.DataFrame(self._mapping.apply(len), columns=["n_obs"])
-        lens = pd.merge(lens, self.settings,
-                        left_on="clustering", right_index=True)
+        lens = pd.merge(lens, self.settings, left_on="clustering", right_index=True)
         if log1p:
             for k in lens.columns[lens.dtypes.apply(is_numeric_dtype)]:
                 lens[f"log1p_{k}"] = np.log1p(lens[k])
@@ -514,7 +551,9 @@ class ReconcilerBase(object):
         # r = r._parent
         m = self._mapping
         cdf = pd.DataFrame(index=pd.Index(self.settings.index, name="clustering"))
-        cdf["n_clusters"] = m.index.get_level_values("clustering").value_counts(sort=False).sort_index()
+        cdf["n_clusters"] = (
+            m.index.get_level_values("clustering").value_counts(sort=False).sort_index()
+        )
         ls = m.apply(len)
         gb = ls.groupby(level="clustering")
         cdf["min_n_obs"] = gb.min()
@@ -555,23 +594,31 @@ class ReconcilerSubset(ReconcilerBase):
     def __init__(self, parent, settings, clusterings, mapping, graph):
         # assert isinstance(parent, Reconciler)  #  Can fail when using autoreloader
         assert all(settings.index == clusterings.columns)
-        assert all(mapping.index.get_level_values("clustering").unique().isin(settings.index))
+        assert all(
+            mapping.index.get_level_values("clustering").unique().isin(settings.index)
+        )
         self._parent = parent
         self.settings = settings
         self.clusterings = clusterings
-        self._obs_names = parent._obs_names[parent._obs_names.isin(clusterings.index)]  # Ordering
+        self._obs_names = parent._obs_names[
+            parent._obs_names.isin(clusterings.index)
+        ]  # Ordering
         # self._obs_names = self.clusterings.index
         self._mapping = mapping
         self.graph = graph
 
-    def find_contained_components(self, min_presence: float, min_weight: float = 0.9, min_cells: int = 2):
+    def find_contained_components(
+        self, min_presence: float, min_weight: float = 0.9, min_cells: int = 2
+    ):
         """
         Find components contained in a subset.
         """
         m1 = self._mapping
         m2 = self._parent._mapping
         presence = m1.apply(len) / m2.loc[m1.index].apply(len)
-        clusters = np.array(presence.index.get_level_values("cluster")[presence > min_presence])
+        clusters = np.array(
+            presence.index.get_level_values("cluster")[presence > min_presence]
+        )
         return self.find_components(min_weight, clusters, min_cells)
 
     def find_components(self, min_weight, clusters, min_cells=2) -> List[Component]:
@@ -624,13 +671,19 @@ class Reconciler(ReconcilerBase):
     _mapping : pandas.Series
         ``pd.Series`` with a ``MultiIndex``. Index has levels ``clustering``
         and ``cluster``. Each position in index should have a unique value at
-        level "cluster", which corresponds to a cluster in the clustering 
+        level "cluster", which corresponds to a cluster in the clustering
         dataframe. Values are ``np.arrays`` with indices of cells in relevant
         cluster. This should be considered immutable, though this is not the
         case for ``ReconcilerSubset``s.
     """
 
-    def __init__(self, settings: pd.DataFrame, clusterings: pd.DataFrame, mapping: pd.Series, graph: igraph.Graph):
+    def __init__(
+        self,
+        settings: pd.DataFrame,
+        clusterings: pd.DataFrame,
+        mapping: pd.Series,
+        graph: igraph.Graph,
+    ):
         assert all(settings.index == clusterings.columns)
         self._parent = self  # Kinda hacky, could maybe remove
         self.settings = settings
@@ -663,9 +716,12 @@ class Reconciler(ReconcilerBase):
         # nodemap = np.frompyfunc(cidtonode.get, 1, 1)
 
         # Get mapping from clustering to clusters
-        # Because this is an Reconciler object, we can just index by position into the mapping
+        # Because this is an Reconciler object, we can just index the mapping by position
         clusteringtocluster = {
-            k: np.array(v) for k, v in pairs_to_dict(iter(self._mapping.loc[(slice(None), clusters)].index)).items()
+            k: np.array(v)
+            for k, v in pairs_to_dict(
+                iter(self._mapping.loc[(slice(None), clusters)].index)
+            ).items()
         }
         # Only look for clusters in graph
         clusters = np.intersect1d(clusters, sub_g.vs["cluster_id"], assume_unique=True)
@@ -675,8 +731,10 @@ class Reconciler(ReconcilerBase):
         to_visit[clusters] = True
 
         # Figure out the clusterings I want to visit
-        # I know that no two clusters from one clustering can be in the same component (should probably put limit on jaccard score to ensure this)
-        # This means I can explore each component at the same time, or at least know I won't be exploring the same one twice
+        # I know that no two clusters from one clustering can be in the same component
+        # (should probably put limit on jaccard score to ensure this).
+        # This means I can explore each component at the same time, or at least know
+        # I won't be exploring the same one twice
         frame = self._mapping.index.to_frame().reset_index(drop=True)
         clusterings = frame.loc[lambda x: x["cluster"].isin(clusters)]["clustering"]
         clustering_queue = clusterings.tolist()
@@ -685,7 +743,9 @@ class Reconciler(ReconcilerBase):
         while len(clustering_queue) > 0:
             clustering = clustering_queue.pop()
             foundclusters = clusteringtocluster[clustering]
-            foundclusters = foundclusters[np.where(to_visit[foundclusters])[0]]  # Filtering
+            foundclusters = foundclusters[
+                np.where(to_visit[foundclusters])[0]
+            ]  # Filtering
             if not any(to_visit[foundclusters]):
                 continue
             for cluster in foundclusters:
@@ -770,7 +830,6 @@ def reconcile(
         )
     # Set cluster names to be unique
     # Rank data to be sure values are consecutive integers per cluster
-    # clusterings = clusterings.copy()  # clusterings gets mutated, but the following line makes a copy anyways
     clusterings = clusterings.rank(axis=0, method="dense").astype(int) - 1
     cvals = clusterings.values
     cvals[:, 1:] += (cvals[:, :-1].max(axis=0) + 1).cumsum()
@@ -779,7 +838,9 @@ def reconcile(
 
     assert all(np.unique(cvals) == mapping.index.levels[1])
 
-    edges = build_graph(settings, clusterings, mapping=mapping, paramtypes=paramtypes, nprocs=nprocs)
+    edges = build_graph(
+        settings, clusterings, mapping=mapping, paramtypes=paramtypes, nprocs=nprocs
+    )
     graph = igraph.Graph(
         n=len(mapping),
         edges=list(((i, j) for i, j, k in edges)),
@@ -910,7 +971,7 @@ def _gen_mapping(clusterings):
     return keys, values
 
 
-def comp_stats(comps, *, param_stats=False):
+def comp_stats(comps):
     stats = pd.DataFrame(
         {
             "n_clusts": [len(c) for c in comps],
@@ -920,7 +981,7 @@ def comp_stats(comps, *, param_stats=False):
     )
     # TODO: Add some summary of param ranges
     # if param_stats:
-        
+
     for col in stats:
         stats[f"log1p_{col}"] = np.log1p(stats[col])
     return stats

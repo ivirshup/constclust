@@ -12,6 +12,7 @@ import leidenalg
 from multiprocessing import Pool
 from functools import partial
 from tqdm import tqdm
+
 # import bbknn
 
 # TODO: Is random_state being passed to the right thing?
@@ -253,6 +254,9 @@ def cluster(
 
 def _cluster_single(argdict, leiden_kwargs):
     part = leidenalg.find_partition(
-        argdict["graph"], resolution_parameter=argdict["resolution"], seed=argdict["random_state"], **leiden_kwargs
+        argdict["graph"],
+        resolution_parameter=argdict["resolution"],
+        seed=argdict["random_state"],
+        **leiden_kwargs,
     )
     return np.array(part.membership)

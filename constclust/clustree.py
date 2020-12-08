@@ -7,7 +7,17 @@ from io import BytesIO
 
 from bokeh.plotting import from_networkx
 from bokeh.models.graphs import NodesAndLinkedEdges, EdgesAndLinkedNodes
-from bokeh.models import Plot, MultiLine, Circle, HoverTool, ResetTool, SaveTool, Range1d, LabelSet, ColumnDataSource
+from bokeh.models import (
+    Plot,
+    MultiLine,
+    Circle,
+    HoverTool,
+    ResetTool,
+    SaveTool,
+    Range1d,
+    LabelSet,
+    ColumnDataSource,
+)
 
 import datashader as ds
 import datashader.transfer_functions as tf
@@ -18,6 +28,7 @@ import pandas as pd
 import scanpy as sc
 
 from .aggregate import ReconcilerBase
+
 # # TODO: Speed this up
 
 
@@ -45,10 +56,14 @@ def gen_clustree(cluster_df):
         grouped[level] = list()
         for node_name, node_values in solution.groupby(solution):
             grouped[level].append(node_idx)
-            g.add_node(node_idx,
-                       contents=node_values.index.values, level=level,
-                       solution_name=solution_name, partition_id=node_name,
-                       n_items=len(node_values))
+            g.add_node(
+                node_idx,
+                contents=node_values.index.values,
+                level=level,
+                solution_name=solution_name,
+                partition_id=node_name,
+                n_items=len(node_values),
+            )
             node_idx += 1
         # for node_name, node_values in solution.groupby(solution):
         #     grouped[level].append((solution_name, node_name))
@@ -62,15 +77,20 @@ def gen_clustree(cluster_df):
             current_contents = g.node[current_node]["contents"]
             next_contents = g.node[next_node]["contents"]
             intersect = np.intersect1d(
-                current_contents, next_contents, assume_unique=True)
+                current_contents, next_contents, assume_unique=True
+            )
             intersect_size = len(intersect)
             union_size = len(np.union1d(current_contents, next_contents))
             if intersect_size > 0:
-                g.add_edge(current_node, next_node,
-                           weight=intersect_size/union_size, contents=intersect,
-                           out_frac=intersect_size/len(current_contents),
-                           in_frac=intersect_size/len(next_contents),
-                           n_cells=intersect_size)
+                g.add_edge(
+                    current_node,
+                    next_node,
+                    weight=intersect_size / union_size,
+                    contents=intersect,
+                    out_frac=intersect_size / len(current_contents),
+                    in_frac=intersect_size / len(next_contents),
+                    n_cells=intersect_size,
+                )
     return g
 
 
@@ -81,9 +101,14 @@ import bokeh
 import bokeh.plotting
 from bokeh.io import show, output_notebook
 
-def gen_clustree_plot(g: nx.Graph, pos: dict = None,
-                      plot_kwargs: dict = None, node_kwargs: dict = None,
-                      edge_kwargs: dict = None):
+
+def gen_clustree_plot(
+    g: nx.Graph,
+    pos: dict = None,
+    plot_kwargs: dict = None,
+    node_kwargs: dict = None,
+    edge_kwargs: dict = None,
+):
     """
     Takes a graph, basically just instantiates a plot
 
@@ -132,20 +157,24 @@ def get_ranges(pos):
     all_pos = np.array(list(zip(*pos.values())))
     max_x, max_y = all_pos.max(axis=1)
     min_x, min_y = all_pos.min(axis=1)
-    x_margin = max((max_x - min_x) / 10, .5)
-    y_margin = max((max_y - min_y) / 10, .5)
-    return {"x_range": Range1d(min_x-x_margin, max_x+x_margin),
-            "y_range": Range1d(min_y-y_margin, max_y+y_margin)}
+    x_margin = max((max_x - min_x) / 10, 0.5)
+    y_margin = max((max_y - min_y) / 10, 0.5)
+    return {
+        "x_range": Range1d(min_x - x_margin, max_x + x_margin),
+        "y_range": Range1d(min_y - y_margin, max_y + y_margin),
+    }
 
 
 # Hacky, probably worth re-implementing
 def set_edge_alpha(g):
     """Create edge_alpha attribute for edges based on normalized log scaled weights."""
-    edge_weights = pd.Series({(rec[0], rec[1]): float(
-        rec[2]) for rec in g.edges.data("weight")})
+    edge_weights = pd.Series(
+        {(rec[0], rec[1]): float(rec[2]) for rec in g.edges.data("weight")}
+    )
     np.log1p(edge_weights, edge_weights.values)  # inplace log
     nx.set_edge_attributes(
-        g, (edge_weights / edge_weights.max()).to_dict(), "edge_alpha")
+        g, (edge_weights / edge_weights.max()).to_dict(), "edge_alpha"
+    )
 
 
 def clustree(
@@ -157,14 +186,22 @@ def clustree(
 ) -> Plot:
     n_values = r.settings.apply(lambda x: len(x.unique()))
     if sum(n_values != 1) != 1:
-        raise ValueError("Must only exactly one non-unique parameter for generating a clustree.")
+        raise ValueError(
+            "Must only exactly one non-unique parameter for generating a clustree."
+        )
 
     param = n_values.index[np.where(n_values != 1)[0]][0]
     order = np.argsort(r.settings[param])
     clusterings = r.clusterings.iloc[:, order]
 
     g = gen_clustree(clusterings)
-    g_sub = g.edge_subgraph([k for k, v in nx.get_edge_attributes(g, "weight").items() if v > min_edge_weight])
+    g_sub = g.edge_subgraph(
+        [
+            k
+            for k, v in nx.get_edge_attributes(g, "weight").items()
+            if v > min_edge_weight
+        ]
+    )
     pos = nx.nx_agraph.graphviz_layout(g_sub, prog="dot")
 
     p = gen_clustree_plot(
@@ -172,19 +209,22 @@ def clustree(
         pos,
         plot_kwargs=plot_kwargs,
         node_kwargs=node_kwargs,
-        edge_kwargs=edge_kwargs
+        edge_kwargs=edge_kwargs,
     )
 
     return p
+
 
 #########################
 # Hierarchy
 #########################
 
+
 def to_img_element(s):
     if isinstance(s, bytes):
         s = s.decode("utf-8")
     return f'<img src="data:image/png;base64,{s}"/>'
+
 
 def plot_to_bytes(pil_im):
     with BytesIO() as buf:
@@ -193,13 +233,16 @@ def plot_to_bytes(pil_im):
         byteimage = base64.b64encode(buf.read())
     return byteimage
 
+
 # For converting numpy values to python values
 @singledispatch
 def json_friendly(x):
     return x
 
+
 def _identity(x):
     return x
+
 
 for t in [int, float, str, bool, bytes]:
     json_friendly.register(t)(_identity)
@@ -210,13 +253,16 @@ json_friendly.register(np.str_)(str)
 json_friendly.register(np.string_)(str)
 json_friendly.register(np.bool_)(bool)
 
+
 @json_friendly.register(Mapping)
 def json_friendly_mapping(d):
     return {json_friendly(k): json_friendly(v) for k, v in d.items()}
 
+
 @json_friendly.register(Iterable)
 def json_friendly_iterable(l):
     return [json_friendly(x) for x in l]
+
 
 # Suprisingly fast
 def calc_freq(comp):
@@ -254,7 +300,9 @@ def make_umap_plots(clist, coords: pd.DataFrame, scatter_kwargs={}):
     return plots
 
 
-def plot_hierarchy(complist: "ComponentList", coords: pd.DataFrame, *, scatter_kwargs={}):
+def plot_hierarchy(
+    complist: "ComponentList", coords: pd.DataFrame, *, scatter_kwargs={}
+):
     """
     Params
     ------
@@ -265,15 +313,13 @@ def plot_hierarchy(complist: "ComponentList", coords: pd.DataFrame, *, scatter_k
     scatter_kwargs = scatter_kwargs.copy()
     g = complist.to_graph()
     assert len(list(nx.components.weakly_connected_components(g))) == 1
-    for k, v in make_umap_plots(complist, coords, scatter_kwargs=scatter_kwargs).items():
+    for k, v in make_umap_plots(
+        complist, coords, scatter_kwargs=scatter_kwargs
+    ).items():
         g.nodes[k]["img"] = v
 
-
     pos = json_friendly(
-        nx.nx_agraph.graphviz_layout(
-            nx.DiGraph(g.edges(data=False)), 
-            prog="dot"
-        )
+        nx.nx_agraph.graphviz_layout(nx.DiGraph(g.edges(data=False)), prog="dot")
     )
 
     graph_renderer = from_networkx(g, pos)
@@ -286,21 +332,25 @@ def plot_hierarchy(complist: "ComponentList", coords: pd.DataFrame, *, scatter_k
             ("component_id", "@index"),
             ("# solutions:", "@n_solutions"),
             ("# samples in intersect", "@n_intersect"),
-            ("# samples in union", "@n_union")
+            ("# samples in union", "@n_union"),
         ],
-        attachment="vertical"
+        attachment="vertical",
     )
 
     # Adding labels
     label_src = pd.DataFrame.from_dict(
-        graph_renderer.layout_provider.graph_layout,
-        orient="index", columns=["x", "y"]
+        graph_renderer.layout_provider.graph_layout, orient="index", columns=["x", "y"]
     )
     label_src.index.name = "nodeid"
     label_src = ColumnDataSource(label_src)
 
     node_label = LabelSet(
-        x="x", y="y", text="nodeid", level="annotation", source=label_src, text_align="center",
+        x="x",
+        y="y",
+        text="nodeid",
+        level="annotation",
+        source=label_src,
+        text_align="center",
     )
 
     # layout = graph_renderer.layout_provider.graph_layout

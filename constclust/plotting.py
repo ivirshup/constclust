@@ -119,9 +119,13 @@ def component_embedding(component, adata, ax=None, embedding_kwargs={}, basis="X
     adata.obs["_tmp"] = cell_value
     if len(cell_names) < len(adata.obs_names):
         # Take view
-        sc.pl.embedding(adata[cell_names, :], basis=basis, color="_tmp", ax=ax, **embedding_kwargs)
+        sc.pl.embedding(
+            adata[cell_names, :], basis=basis, color="_tmp", ax=ax, **embedding_kwargs
+        )
     else:
-        sc.pl.embedding(adata[cell_names, :], basis=basis, color="_tmp", ax=ax, **embedding_kwargs)
+        sc.pl.embedding(
+            adata[cell_names, :], basis=basis, color="_tmp", ax=ax, **embedding_kwargs
+        )
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
@@ -194,7 +198,8 @@ def component(
     component
         Component object to plot.
     adata
-        AnnData to use for plotting UMAP. Should have same cell names as `component`s parent `Reconciler`.
+        AnnData to use for plotting UMAP. Should have same cell names as `Component`s
+        parent `Reconciler`.
     x
         Parameter to plot on the X-axis of the heatmap.
     y
@@ -224,7 +229,13 @@ def component(
     heatmap_ax = fig.add_subplot(gs[0, 0])
     embedding_ax = fig.add_subplot(gs[0, -1])
     component_param_range(component, x, y, ax=heatmap_ax)
-    component_embedding(component, adata, ax=embedding_ax, basis=embedding_basis, embedding_kwargs=embedding_kwargs)
+    component_embedding(
+        component,
+        adata,
+        ax=embedding_ax,
+        basis=embedding_basis,
+        embedding_kwargs=embedding_kwargs,
+    )
     return fig
 
 

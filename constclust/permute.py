@@ -14,4 +14,3 @@ the `conos` paper. Possible types of pertubation:
     * Randomly remove groups
 * Sensitivity to very rare cell types
 """
-
