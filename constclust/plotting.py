@@ -100,11 +100,11 @@ def umap_cells(cells, adata, ax=None, umap_kwargs={}):
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
-def umap(component, adata, ax=None, umap_kwargs={}):
+def component_embedding(component, adata, ax=None, embedding_kwargs={}, basis="X_umap"):
     # TODO: Views should have parents, which is where I should get my obs names
-    umap_kwargs = umap_kwargs.copy()
-    if "title" not in umap_kwargs:
-        umap_kwargs["title"] = "UMAP"
+    embedding_kwargs = embedding_kwargs.copy()
+    if "title" not in embedding_kwargs:
+        embedding_kwargs["title"] = basis
 
     cell_names = component._parent._obs_names
     # if not all(cell_names.isin(adata.obs_names)):
@@ -119,9 +119,9 @@ def umap(component, adata, ax=None, umap_kwargs={}):
     adata.obs["_tmp"] = cell_value
     if len(cell_names) < len(adata.obs_names):
         # Take view
-        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, **umap_kwargs)
+        sc.pl.embedding(adata[cell_names, :], basis=basis, color="_tmp", ax=ax, **embedding_kwargs)
     else:
-        sc.pl.umap(adata[cell_names, :], color="_tmp", ax=ax, **umap_kwargs)
+        sc.pl.embedding(adata[cell_names, :], basis=basis, color="_tmp", ax=ax, **embedding_kwargs)
     adata.obs.drop(columns="_tmp", inplace=True)
 
 
@@ -181,12 +181,13 @@ def component(
     adata: AnnData,
     x: str = "n_neighbors",
     y: str = "resolution",
+    embedding_basis: str = "X_umap",
     plot_global: bool = False,
     aspect: float = None,
-    umap_kwargs: dict = {},
+    embedding_kwargs: dict = {},
 ):
     """
-    Plot stability and UMAP for component.
+    Plot stability and embedding for component.
 
     Params
     ------
@@ -195,13 +196,15 @@ def component(
     adata
         AnnData to use for plotting UMAP. Should have same cell names as `component`s parent `Reconciler`.
     x
-        Parameter to plot on the X-axis.
+        Parameter to plot on the X-axis of the heatmap.
     y
-        Parameter to plot on the Y-axis.
+        Parameter to plot on the Y-axis of the heatmap.
+    embedding_basis
+        Which basis from the AnnData object to use for embedding.
     aspect
         Aspect ratio of entire plot. Defaults to 1/2.
-    umap_kwargs
-        Arguments passed to `sc.pl.umap`.
+    embedding_kwargs
+        Arguments passed to `sc.pl.embedding`.
     """
     if aspect is None:
         if plot_global:
@@ -219,9 +222,9 @@ def component(
     else:
         gs = fig.add_gridspec(1, 2)
     heatmap_ax = fig.add_subplot(gs[0, 0])
-    umap_ax = fig.add_subplot(gs[0, -1])
+    embedding_ax = fig.add_subplot(gs[0, -1])
     component_param_range(component, x, y, ax=heatmap_ax)
-    umap(component, adata, ax=umap_ax, umap_kwargs=umap_kwargs)
+    component_embedding(component, adata, ax=embedding_ax, basis=embedding_basis, embedding_kwargs=embedding_kwargs)
     return fig
 
 

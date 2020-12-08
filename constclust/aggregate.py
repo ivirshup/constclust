@@ -1,3 +1,4 @@
+import anndata
 from collections.abc import Collection, Callable, Iterable, Hashable, Mapping
 from functools import reduce, partial
 from itertools import chain, combinations
@@ -283,18 +284,43 @@ class ComponentList(Collection):
     # Plotting methods, probably move to own attribute
     def plot_components(
         self,
-        adata: "AnnData",
+        adata: "anndata.AnnData",
         *,
-        show_heatmap=True,
-        x_param="n_neighbors",
-        y_param="resolution",
+        x_param: str = "n_neighbors",
+        y_param: str = "resolution",
+        embedding_basis: str = "X_umap",
+        embedding_kwargs: Mapping = MappingProxyType({}),
     ):
+        """Plot parameter space and scatter plot for each component.
+
+        The parameter space is a heatmap, showing the range of parameters each component was found in.
+        The scatter plot shows which observations were included in the component in a 2d embedding of the dataset.
+
+        Params
+        ------
+        x_param
+            Which key from the parameters will be along the y-axis of the heatmaps.
+        y_param
+            Which key from the parameters will be along the y-axis of the heatmaps.
+        embedding_basis
+            Basis from adata to use for embedding plot.
+        embedding_kwargs
+            Keyword arguments to pass to sc.pl.embedding.
+
+        Example
+        -------
+
+        >>> comps.plot_components(coords=adata.obsm["X_umap"])
+        """
         comps = self._comps
-        # reduce(np.intersect1d, comps.apply(lambda x: x.settings.columns))
+
+        embedding_kwargs = embedding_kwargs.copy()
+        embedding_kwargs["show"] = False
+
         stats = self.describe()
         for k in comps.index:
             title = f"Component {k}: n_solutions: {stats.loc[k, 'n_solutions']}, n_intersect: {stats.loc[k, 'n_intersect']}, n_union: {stats.loc[k, 'n_union']}"
-            fig = plotting.component(comps[k], adata, x=x_param, y=y_param, umap_kwargs={"show": False, "title": "UMAP"})
+            fig = plotting.component(comps[k], adata, embedding_basis=embedding_basis, x=x_param, y=y_param, embedding_kwargs=embedding_kwargs)
             fig.suptitle(title)
             plt.show()
 
@@ -317,14 +343,15 @@ class ComponentList(Collection):
         scatter_kwargs
             Key word arguments passed to ds_umap
 
-        Usage
-        -----
+        Example
+        -------
 
         >>> from bokeh.io import show
+        >>> comps = reconciler.get_components(0.9, min_cells=5)
         >>> show(
                 comps
                 .filter(min_solutions=100)
-                .plot_hierarchies(adata.obsm["X_umap"])
+                .plot_hierarchies(coords=adata.obsm["X_umap"])
             )
         """
         from .clustree import plot_hierarchy
@@ -457,8 +484,8 @@ class ReconcilerBase(object):
         Returns
         -------
 
-        DataFrame containing some summary statistics on the clusters in this reconciler. 
-        Good for plotting.
+        DataFrame containing summary statistics on the clusters in this reconciler. Good
+        for plotting.
 
         Example
         -------
