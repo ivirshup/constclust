@@ -22,6 +22,35 @@ def test_reconciler_creation(clustering_run):
     # TODO: What else should be true about this?
 
 
+def test_filter(clustering_run):
+    params, clusts = clustering_run
+    r = reconcile(params, clusts)
+    complist = r.get_components(0.9)
+    stats = complist.describe()
+
+    for stat in ["union", "intersect", "union"]:
+        stat_series = stats[f"n_{stat}"]
+
+        # Check bounding by median
+        median_val = stat_series.median()
+        min_filtered_stats = complist.filter(**{f"min_{stat}": median_val}).describe()
+        assert (min_filtered_stats[f"n_{stat}"] >= median_val).all()
+        max_filtered_stats = complist.filter(**{f"max_{stat}": median_val}).describe()
+        assert (max_filtered_stats[f"n_{stat}"] <= median_val).all()
+
+        # Check that filtering to min only includes values with min
+        assert 1 == len(
+            complist.filter(**{f"min_{stat}": stat_series.min()})
+            .describe()[f"n_{stat}"]
+            .unique()
+        )
+        assert 1 == len(
+            complist.filter(**{f"max_{stat}": stat_series.max()})
+            .describe()[f"n_{stat}"]
+            .unique()
+        )
+
+
 def test_one_hot(clustering_run):
     params, clusts = clustering_run
     r = reconcile(params, clusts)

@@ -261,7 +261,7 @@ class ComponentList(Collection):
             comps.apply(lambda x: len(x.intersect)), min_intersect, max_intersect
         )
         mask &= calc_mask(
-            comps.apply(lambda x: len(x.union)), min_intersect, max_intersect
+            comps.apply(lambda x: len(x.union)), min_union, max_union
         )
         mask &= calc_mask(
             comps.apply(lambda x: len(x.settings.index)), min_solutions, max_solutions
