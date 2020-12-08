@@ -324,9 +324,14 @@ class ComponentList(Collection):
         embedding_kwargs = embedding_kwargs.copy()
         embedding_kwargs["show"] = False
 
+        def title_string(comp_id, entry):
+            return f"Component {comp_id}: " + ", ".join(
+                f"{k}: {v}" for k, v in entry.items()
+            )
+
         stats = self.describe()
         for k in comps.index:
-            title = f"Component {k}: n_solutions: {stats.loc[k, 'n_solutions']}, n_intersect: {stats.loc[k, 'n_intersect']}, n_union: {stats.loc[k, 'n_union']}"
+            title = title_string(k, stats.loc[k])
             fig = plotting.component(
                 comps[k],
                 adata,
