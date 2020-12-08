@@ -209,7 +209,7 @@ json_friendly.register(np.floating)(float)
 json_friendly.register(np.str_)(str)
 json_friendly.register(np.string_)(str)
 json_friendly.register(np.bool_)(bool)
-    
+
 @json_friendly.register(Mapping)
 def json_friendly_mapping(d):
     return {json_friendly(k): json_friendly(v) for k, v in d.items()}
@@ -227,10 +227,11 @@ def calc_freq(comp):
     s.iloc[list(c.keys())] += list(c.values())
     return s
 
+
 def ds_umap(
     df: pd.DataFrame,
-    x="X_umap-0",
-    y="X_umap-1",
+    x="x",
+    y="y",
     *,
     agg=None,
     width: int = 150,
@@ -243,25 +244,28 @@ def ds_umap(
     im = tf.shade(pts, **shade_kwargs)
     return to_img_element(plot_to_bytes(im.to_pil()))
 
-def make_umap_plots(clist, adata, scatter_kwargs={}):
-    plotdf = sc.get.obs_df(adata, obsm_keys=[("X_umap", 0), ("X_umap", 1)])
+
+def make_umap_plots(clist, coords: pd.DataFrame, scatter_kwargs={}):
+    x, y = coords.columns
     plots = {}
     for cid, c in zip(clist.components.index, clist):
-        plotdf[str(cid)] = calc_freq(c).loc[plotdf.index]
-        plots[cid] = ds_umap(plotdf, agg=ds.max(str(cid)), **scatter_kwargs)
+        coords[str(cid)] = calc_freq(c).loc[coords.index]
+        plots[cid] = ds_umap(coords, x=x, y=y, agg=ds.max(str(cid)), **scatter_kwargs)
     return plots
 
-def plot_hierarchy(complist: "ComponentList", adata: "AnnData", scatter_kwargs={}):
+
+def plot_hierarchy(complist: "ComponentList", coords: pd.DataFrame, *, scatter_kwargs={}):
     """
     Params
     ------
     complist
         List of components that will be plotted in this graph.
     """
+    coords = coords.copy()
     scatter_kwargs = scatter_kwargs.copy()
     g = complist.to_graph()
     assert len(list(nx.components.weakly_connected_components(g))) == 1
-    for k, v in make_umap_plots(complist, adata, scatter_kwargs=scatter_kwargs).items():
+    for k, v in make_umap_plots(complist, coords, scatter_kwargs=scatter_kwargs).items():
         g.nodes[k]["img"] = v
 
 

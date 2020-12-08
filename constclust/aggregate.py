@@ -1,3 +1,10 @@
+from collections.abc import Collection, Callable, Iterable, Hashable, Mapping
+from functools import reduce, partial
+from itertools import chain, combinations
+from multiprocessing import Pool
+from types import MappingProxyType
+from typing import List, Optional, Union
+
 import igraph
 import networkx as nx
 import numba
@@ -12,12 +19,6 @@ from pandas.api.types import (
 from sklearn import metrics
 from scipy import sparse
 import matplotlib.pyplot as plt
-
-from collections.abc import Collection, Callable, Iterable, Hashable
-from functools import reduce, partial
-from itertools import chain, combinations
-from multiprocessing import Pool
-from typing import List, Optional
 
 from .paramspace import gen_neighbors
 from .utils import reverse_series_map, pairs_to_dict
@@ -116,7 +117,8 @@ class ComponentList(Collection):
     def __init__(self, components):
         # Possible checks
         # 1. Set of parameters should be the same
-        # 2. Should be same reconciler?
+        # 2. Should be same reconciler? I'm assuming this for now
+        self._rec = next(iter(components))._parent
         self._comps = pd.Series(components)
         if len(self._comps.index) != len(self._comps.index.unique()):
             raise KeyError("Components must have unique names")
@@ -153,6 +155,11 @@ class ComponentList(Collection):
     @property
     def components(self):
         return self._comps.copy()
+
+    @property
+    def obs_names(self) -> pd.Index:
+        """The set of observations these components were found on."""
+        return self._rec.obs_names
 
     def to_graph(self, overlap="intersect") -> nx.DiGraph:
         """Builds a hierarchichal graph of the components"""
@@ -299,9 +306,39 @@ class ComponentList(Collection):
     #         nx.draw(subg, pos=nx.nx_agraph.graphviz_layout(subg, prog="dot"), with_labels=True)
     #         plt.show()
 
-    def plot_hierarchies(self, adata, *, overlap="intersect", **kwargs):
+    def plot_hierarchies(self, coords: Union[np.ndarray, pd.DataFrame], *, overlap="intersect", scatter_kwargs: Mapping = MappingProxyType({})):
+        """Find and plot interactive hierarchies of components.
+
+        Params
+        ------
+        coords
+            Coordinates to use in scatter plots. Should have shape (n_obs, 2). If it's a
+            dataframe, it's index should contain the same elements as `self.obs_names`.
+        scatter_kwargs
+            Key word arguments passed to ds_umap
+
+        Usage
+        -----
+
+        >>> from bokeh.io import show
+        >>> show(
+                comps
+                .filter(min_solutions=100)
+                .plot_hierarchies(adata.obsm["X_umap"])
+            )
+        """
         from .clustree import plot_hierarchy
         from bokeh.layouts import column
+        if coords.shape != (len(self.obs_names), 2):
+            raise ValueError(
+                f"`coords` must have shape: {(len(self.obs_names), 2)}, had shape: {coords.shape}."
+            )
+
+        if isinstance(coords, pd.DataFrame):
+            coords.reindex(index=self.obs_names)
+            assert coords.index.equals(self.obs_names), "coords index did not match self.obs_names"
+        else:
+            coords = pd.DataFrame(coords, columns=["x", "y"], index=self.obs_names)
 
         plots = []
         for hierarchy in nx.components.weakly_connected.weakly_connected_components(self.to_graph(overlap=overlap)):
@@ -309,9 +346,8 @@ class ComponentList(Collection):
                 print(f"Component {list(hierarchy)[0]} was not found in a hierarchy.")
                 continue
             clist_sub = ComponentList(self._comps[self._comps.index.isin(hierarchy)])
-            plots.append(plot_hierarchy(clist_sub, adata, **kwargs))
+            plots.append(plot_hierarchy(clist_sub, coords, scatter_kwargs=scatter_kwargs))
         return column(*plots)
-        # show(column(*plots))
 
 
 
@@ -331,6 +367,11 @@ class ReconcilerBase(object):
     @property
     def cluster_ids(self):
         return self._mapping.index.get_level_values("cluster")
+
+    @property
+    def obs_names(self) -> pd.Index:
+        """The set of observations clusters were found on."""
+        return pd.Index(self._obs_names.values)
 
     # TODO should I remove this?
     def get_param_range(self, clusters):
@@ -457,6 +498,8 @@ class ReconcilerBase(object):
         return cdf
 
 
+# TODO: Figure out what I want this to be. Do I want this to refer to the full set
+# of observations at all, or should that information go away?
 class ReconcilerSubset(ReconcilerBase):
     """
     Subset of a Reconciler
@@ -548,7 +591,7 @@ class Reconciler(ReconcilerBase):
         clusters.
     cluster_ids : numpy.ndarray[int]
         Integer ids of all clusters in this Reconciler.
-    _obs_names : pandas.Index
+    _obs_names : pandas.Series
         Ordered set for names of the cells. Internally they are refered to by
         integer positions.
     _mapping : pandas.Series

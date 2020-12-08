@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
 from .test_aggregate import clustering_run
+
 from constclust import ComponentList, Component, reconcile
+
 
 def test_subsetting_basic(clustering_run):
     r = reconcile(*clustering_run)
@@ -37,3 +40,12 @@ def test_one_hot(clustering_run):
 
     for name, comp in complist._comps.items():
         assert np.all(encoded[comp.intersect_names].loc[name] == True)
+
+
+def test_obs_names(clustering_run):
+    params, clusts = clustering_run
+    r = reconcile(*clustering_run)
+    pd.testing.assert_index_equal(r.obs_names, clusts.index)
+
+    complist = r.get_components(0.9).filter(min_solutions=5)
+    pd.testing.assert_index_equal(complist.obs_names, clusts.index)
