@@ -4,7 +4,7 @@ from functools import reduce, partial
 from itertools import chain, combinations
 from multiprocessing import Pool
 from types import MappingProxyType
-from typing import List, Optional, Union
+from typing import Tuple, List, Optional, Union
 
 import igraph
 import networkx as nx
@@ -806,7 +806,7 @@ def reconcile(
     settings: pd.DataFrame, clusterings: pd.DataFrame, paramtypes="oou", nprocs: int = 1
 ) -> Reconciler:
     """
-    Constructor for reconciler object.
+    Reconcile clusterings and parameters into a graph of clusters.
 
     Parameters
     ----------
@@ -819,7 +819,7 @@ def reconcile(
 
     Example
     -------
-    >>> params, clusterings = cluster(adata, ... )
+    >>> params, clusterings = cluster(adata, ...)
     >>> reconciler = reconcile(params, clusterings)
     """
     assert all(
@@ -855,7 +855,7 @@ def reconcile(
     return Reconciler(settings, clusterings, mapping, graph)
 
 
-def _prep_neighbors(neighbors, clusterings):
+def _prep_neighbors(neighbors, clusterings) -> Tuple[np.ndarray, np.ndarray]:
     for i, j in neighbors:
         yield clusterings.values[:, i], clusterings.values[:, j]
 
@@ -866,7 +866,10 @@ def _call_get_edges(args):
 
 
 @numba.njit(cache=True)
-def _get_edges(clustering1: np.array, clustering2: np.array):
+def _get_edges(clustering1: np.array, clustering2: np.array) -> List[Tuple[int, int, float]]:
+    """
+    Returns list of intersecting clusters and the jaccard index between them.
+    """
     edges = []
     offset1 = clustering1.min()
     offset2 = clustering2.min()
@@ -898,14 +901,17 @@ def _get_edges(clustering1: np.array, clustering2: np.array):
     return edges
 
 
-def build_graph(settings, clusters, mapping=None, paramtypes="oou", nprocs=1):
+def build_graph(settings, clusters, mapping=None, paramtypes="oou", nprocs=1) -> List[Tuple[int, int, float]]:
     """
     Build a graph of overlapping clusters (for neighbors in parameter space).
     """
     graph = list()  # edge list
+    # Graph of which clusterings (e.g. partitionings of the dataset) to compare:
     neighbors = gen_neighbors(settings, paramtypes)
     # if mapping is None:
     # mapping = gen_mapping(clusters)
+
+    # Probably premature optimization
     args = _prep_neighbors(neighbors, clusters)
     if nprocs > 1:
         # TODO: Consider replacing with joblib
