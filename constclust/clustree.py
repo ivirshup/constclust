@@ -74,8 +74,8 @@ def gen_clustree(cluster_df):
         current_nodes = grouped[level]
         next_nodes = grouped[level + 1]
         for current_node, next_node in product(current_nodes, next_nodes):
-            current_contents = g.node[current_node]["contents"]
-            next_contents = g.node[next_node]["contents"]
+            current_contents = g.nodes[current_node]["contents"]
+            next_contents = g.nodes[next_node]["contents"]
             intersect = np.intersect1d(
                 current_contents, next_contents, assume_unique=True
             )
